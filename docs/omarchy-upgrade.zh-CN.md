@@ -14,7 +14,7 @@
 
 轻按 Win（Super）后，左侧出现 `1 2 3 4 5 c v Space Enter`，原来的按键向右移动，宽度不足时可横向滚动。Win 在普通按键后继续保持按下；可加入 Ctrl、Shift、Alt 来发送更多组合键。再次点击 Win 即释放，新增按键隐藏。Ctrl、Shift、Alt 原有的单次/长按锁定行为继续适用。外接键盘的 Win 按下/释放也控制新增按键的显示。
 
-如果开启「单次轻按使用超级键」，轻按仍只发送一次 Win 按下和释放；要连续使用组合键，请关闭该设置，或长按锁定 Win。
+如果开启「单次轻按使用超级键」，轻按仍只发送一次 Win 按下和释放；要连续使用组合键，请关闭该设置，或长按锁定 Win。隐藏按键栏或应用进入后台也会释放虚拟 Win，避免按键卡住。
 
 ## 受控 Omarchy 电脑需要什么
 
@@ -49,4 +49,6 @@ mise exec java@temurin-17 -- ./gradlew assembleDebug assembleDebugAndroidTest li
 
 新增测试覆盖 UTF-8 中文/emoji/多行文本、先剪贴板后快捷键的消息顺序、重复发送相同内容、仅复制、传统服务器的无损保护、仅查看和断线，以及 Win 连续组合键和关闭自动同步后使用输入框发送。
 
-GitHub Actions 在 Android 35 模拟器上运行剪贴板、虚拟按键、KeyHandler 和 VncClient 的回归测试。Omarchy 的实际聚焦窗口粘贴效果仍需手机连接实际服务器验证。
+准备好的自动构建配置会在 Android 35 模拟器上运行剪贴板、虚拟按键、KeyHandler 和 VncClient 的回归测试。该配置目前留在本地 `.github/workflows/main.yml`，GitHub 凭据需要补充 `workflow` 权限后才能推送：`gh auth refresh -h github.com -s workflow`。
+
+目前已通过资源 XML 解析、脚本语法检查，以及快捷键枚举和测试服务器的独立 Kotlin 编译检查。本地完整 Gradle 构建停在 Android SDK 缺失处；APK 尚未生成，Android 回归测试尚未执行。Omarchy 的实际聚焦窗口粘贴效果也需手机连接实际服务器验证。

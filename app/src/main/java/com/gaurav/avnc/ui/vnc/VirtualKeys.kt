@@ -78,6 +78,8 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
     }
 
     fun hide(saveVisibility: Boolean = false) {
+        // A persistent Super must not remain held when its release button is hidden.
+        toggleKeys.filter { it.tag == VirtualKey.LeftSuper && it.isChecked }.forEach { it.isChecked = false }
         container?.visibility = View.GONE
         openedWithKb = false //Reset flag
         if (saveVisibility) pref.runInfo.showVirtualKeys = false

@@ -250,6 +250,16 @@ class VirtualKeysTest : VncSessionTest() {
     }
 
     @Test
+    fun hidingKeysReleasesPersistentSuper() {
+        vncSession.run {
+            onView(withContentDescription("Super")).checkWillBeDisplayed().doClick()
+            onView(withContentDescription("Close virtual keys")).perform(scrollTo()).doClick()
+        }
+        assertEquals(listOf(XKeySym.XK_Super_L to true, XKeySym.XK_Super_L to false),
+                     vncSession.server.receivedKeySyms.toList())
+    }
+
+    @Test
     fun vkModifierKeysShouldApplyToKeyPressedOnKeyboard() {
         vncSession.run {
             onView(withText("Shift")).checkWillBeDisplayed().doClick()
