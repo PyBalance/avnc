@@ -51,4 +51,34 @@ mise exec java@temurin-17 -- ./gradlew assembleDebug assembleDebugAndroidTest li
 
 准备好的自动构建配置会在 Android 35 模拟器上运行剪贴板、虚拟按键、KeyHandler 和 VncClient 的回归测试。该配置目前留在本地 `.github/workflows/main.yml`，GitHub 凭据需要补充 `workflow` 权限后才能推送：`gh auth refresh -h github.com -s workflow`。
 
-目前已通过资源 XML 解析、脚本语法检查，以及快捷键枚举和测试服务器的独立 Kotlin 编译检查。本地完整 Gradle 构建停在 Android SDK 缺失处；APK 尚未生成，Android 回归测试尚未执行。Omarchy 的实际聚焦窗口粘贴效果也需手机连接实际服务器验证。
+2026-10-07 已完成本地 SDK 配置和构建：SDK 位于 `~/Android/Sdk`，Android Studio 的项目 Gradle JDK 已设为用户目录中的 Temurin 17。本机可以执行：
+
+```bash
+cd ~/avnc
+mise exec java@temurin-17 -- ./gradlew assembleDebug assembleDebugAndroidTest
+```
+
+调试 APK 位于 `app/build/outputs/apk/debug/app-debug.apk`，同时复制到 `~/Downloads/AVNC-Omarchy-3.3.1-debug.apk`。该 APK 已通过签名校验并成功安装到本机 Waydroid。
+
+验证结果：
+
+- 本机 Waydroid（Android 13 / API 33）：剪贴板、虚拟按键、KeyHandler、VncClient 共 74 项回归测试全部通过。
+- 本机 Omarchy / WayVNC：另 1 项实机测试通过。中文、emoji、多行文本完整进入远端剪贴板；「仅复制」不改变文本框；再次发送同一段文本并执行 Win+V，文本恰好粘贴一次。
+- 已编译 ARM64、ARM32、x86、x86_64 原生库。尚未在实体 Android 手机上验证。
+- `lintDebug` 已执行，报告 245 项 `MissingTranslation` 错误：234 项涉及上游已有字符串，11 项涉及本次新增字符串的其他语言翻译。新增界面已提供英文和简体中文，其他语言使用英文回退。报告位于 `app/build/reports/lint-results-debug.html`。因此完整的 lint 检查仍未通过，但 APK 和测试 APK 构建成功。
+
+`LiveClipboardPasteTest` 是需主动指定参数的实机集成测试，普通测试运行会跳过它。辅助脚本 `scripts/clipboard-paste-probe.py` 会打开临时 GTK 文本框，并在本机回环地址 `127.0.0.1:18081` 提供剪贴板和文本框读取接口。运行它需要 GTK 4 和 Python GObject；测试结束应关闭脚本并恢复剪贴板。
+
+在临时 WayVNC 服务监听 `127.0.0.1:15900`、辅助脚本运行且专用文本框聚焦的情况下，可通过 ADB 反向转发执行：
+
+```bash
+adb reverse tcp:15900 tcp:15900
+adb reverse tcp:18081 tcp:18081
+adb shell am instrument -w \
+  -e class com.gaurav.avnc.session.LiveClipboardPasteTest \
+  -e liveVncHost 127.0.0.1 -e liveVncPort 15900 \
+  -e liveClipboardProbe http://127.0.0.1:18081 \
+  com.gaurav.avnc.debug.test/androidx.test.runner.AndroidJUnitRunner
+adb reverse --remove tcp:15900
+adb reverse --remove tcp:18081
+```
