@@ -84,6 +84,17 @@
     <string name="hint_ssh_port">SSH port</string>
     <string name="hint_key_password">Key password</string>
     <string name="hint_send_text_to_server">Send text to server</string>
+    <string name="title_send_via_clipboard">Send text via clipboard</string>
+    <string name="title_clipboard_omarchy">Copy and paste · Omarchy (Super+V)</string>
+    <string name="title_clipboard_ctrl_v">Copy and paste · Ctrl+V</string>
+    <string name="title_clipboard_ctrl_shift_v">Copy and paste · Ctrl+Shift+V</string>
+    <string name="title_clipboard_shift_insert">Copy and paste · Shift+Insert</string>
+    <string name="title_clipboard_copy_only">Copy to remote clipboard only</string>
+    <string name="msg_clipboard_text_empty">Enter some text to send.</string>
+    <string name="msg_remote_clipboard_sent">Clipboard text sent to server.</string>
+    <string name="msg_remote_clipboard_paste_sent">Clipboard text and paste shortcut sent. If nothing appears, focus the remote text field and paste again.</string>
+    <string name="msg_remote_clipboard_unicode_unsupported">The server has not enabled UTF-8 clipboard support. Text was kept; no paste was sent. Use a server with UTF-8 clipboard support for Chinese and emoji.</string>
+    <string name="msg_remote_clipboard_failed">Could not send clipboard text. Check the connection and view-only mode. Your text was kept.</string>
 
 
     <string name="msg_about_app">A fast and secure VNC client. Remotely view and control any device running a VNC server.\n\n\nAVNC is an open source and copyleft software — made with help from many contributors.</string>

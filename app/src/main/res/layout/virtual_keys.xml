@@ -40,12 +40,28 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent">
 
-                <GridLayout
-                    android:id="@+id/keys"
+                <LinearLayout
+                    android:id="@+id/keys_host"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:rowCount="2" />
+                    android:layoutDirection="ltr"
+                    android:orientation="horizontal">
+
+                    <GridLayout
+                        android:id="@+id/super_keys"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:rowCount="2"
+                        android:visibility="gone" />
+
+                    <GridLayout
+                        android:id="@+id/keys"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:rowCount="2" />
+                </LinearLayout>
             </com.gaurav.avnc.ui.vnc.NestableHorizontalScrollView>
 
 
@@ -77,6 +93,14 @@
                     android:imeOptions="actionSend|flagNoFullscreen|flagNoExtractUi"
                     android:importantForAutofill="no"
                     android:inputType="text" />
+
+                <ImageButton
+                    android:id="@+id/text_clipboard_btn"
+                    style="@style/VirtualKey.Compact"
+                    android:layout_gravity="center_vertical"
+                    android:contentDescription="@string/title_send_via_clipboard"
+                    android:src="@drawable/ic_clipboard_send"
+                    app:tint="?colorPrimary" />
 
             </LinearLayout>
         </LinearLayout>

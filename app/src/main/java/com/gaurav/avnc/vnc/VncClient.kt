@@ -229,15 +229,24 @@ class VncClient(private val observer: Observer) {
     /**
      * Sends text to remote desktop's clipboard.
      */
-    fun sendCutText(text: String) = ifConnectedAndInteractive {
-        if (text != lastCutText) {
-            val sent = if (nativeIsUTF8CutTextSupported(nativePtr))
-                nativeSendCutText(nativePtr, text.toByteArray(StandardCharsets.UTF_8), true)
-            else
-                nativeSendCutText(nativePtr, text.toByteArray(StandardCharsets.ISO_8859_1), false)
-            if (sent)
-                lastCutText = text
+    enum class ClipboardSendResult { Sent, Unchanged, UnsupportedText, Unavailable, Failed }
+
+    fun sendCutText(text: String, force: Boolean = false, requireLossless: Boolean = false): ClipboardSendResult {
+        var result = ClipboardSendResult.Unavailable
+        ifConnectedAndInteractive {
+            val utf8 = nativeIsUTF8CutTextSupported(nativePtr)
+            if (requireLossless && !utf8 && !StandardCharsets.ISO_8859_1.newEncoder().canEncode(text)) {
+                result = ClipboardSendResult.UnsupportedText
+            } else if (!force && text == lastCutText) {
+                result = ClipboardSendResult.Unchanged
+            } else {
+                val charset = if (utf8) StandardCharsets.UTF_8 else StandardCharsets.ISO_8859_1
+                val sent = nativeSendCutText(nativePtr, text.toByteArray(charset), utf8)
+                if (sent) lastCutText = text
+                result = if (sent) ClipboardSendResult.Sent else ClipboardSendResult.Failed
+            }
         }
+        return result
     }
 
     /**

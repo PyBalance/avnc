@@ -20,6 +20,7 @@ import com.gaurav.avnc.R
 import com.gaurav.avnc.model.LoginInfo
 import com.gaurav.avnc.model.ServerProfile
 import com.gaurav.avnc.session.Messenger
+import com.gaurav.avnc.session.PasteShortcut
 import com.gaurav.avnc.session.RemoteSession
 import com.gaurav.avnc.ui.vnc.FrameScroller
 import com.gaurav.avnc.ui.vnc.FrameState
@@ -314,6 +315,23 @@ class VncViewModel(app: Application) : BaseViewModel(app) {
         if (pref.server.clipboardSync && connected) launchIO {
             getClipboardText(app)?.let { messenger?.sendClipboardText(it) }
         }
+    }
+
+    /** An explicit transfer uses the text box, independently of automatic clipboard sync. */
+    fun sendTextViaClipboard(text: String, shortcut: PasteShortcut) {
+        val queued = messenger?.sendTextViaClipboard(text, shortcut) { result ->
+            launchMain {
+                val message = when (result) {
+                    VncClient.ClipboardSendResult.Sent ->
+                        if (shortcut == PasteShortcut.CopyOnly) R.string.msg_remote_clipboard_sent
+                        else R.string.msg_remote_clipboard_paste_sent
+                    VncClient.ClipboardSendResult.UnsupportedText -> R.string.msg_remote_clipboard_unicode_unsupported
+                    else -> R.string.msg_remote_clipboard_failed
+                }
+                Toast.makeText(app, message, Toast.LENGTH_LONG).show()
+            }
+        } == true
+        if (!queued) Toast.makeText(app, R.string.msg_remote_clipboard_failed, Toast.LENGTH_LONG).show()
     }
 
     private var clipReceiverJob: Job? = null

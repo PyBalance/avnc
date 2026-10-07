@@ -14,6 +14,7 @@ import androidx.test.espresso.Espresso.onIdle
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.pressImeActionButton
 import androidx.test.espresso.action.ViewActions.pressKey
+import androidx.test.espresso.action.ViewActions.replaceText
 import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.espresso.assertion.ViewAssertions.matches
@@ -39,6 +40,7 @@ import com.gaurav.avnc.doClick
 import com.gaurav.avnc.doLongClick
 import com.gaurav.avnc.doTypeText
 import com.gaurav.avnc.runOnMainSync
+import com.gaurav.avnc.pollingAssert
 import com.gaurav.avnc.targetContext
 import com.gaurav.avnc.targetPrefs
 import com.gaurav.avnc.util.AppPreferences
@@ -210,6 +212,41 @@ class VirtualKeysTest : VncSessionTest() {
 
         assertEquals(listOf(Pair(XKeySym.XK_Super_L, true), Pair(XKeySym.XK_Super_L, false)),
                      vncSession.server.receivedKeySyms)
+    }
+
+    @Test
+    fun superShortcutsPersistThroughOtherModifiersAndRepeatedKeys() {
+        vncSession.run {
+            onView(withText("1")).checkIsNotDisplayed()
+            onView(withContentDescription("Super")).doClick()
+            onView(withText("1")).checkWillBeDisplayed().doClick()
+            onView(withText("2")).doClick()
+            onView(withContentDescription("Super")).perform(scrollTo()).check(matches(isChecked()))
+            onView(withText("Ctrl")).perform(scrollTo()).doClick()
+            onView(withText("v")).perform(scrollTo()).doClick()
+            onView(withContentDescription("Super")).perform(scrollTo()).check(matches(isChecked()))
+            onView(withText("Ctrl")).check(matches(isNotChecked()))
+            onView(withText("1")).perform(scrollTo()).checkIsDisplayed()
+            onView(withContentDescription("Super")).perform(scrollTo()).doClick()
+            onView(withText("1")).checkIsNotDisplayed()
+        }
+        assertEquals(listOf(XKeySym.XK_Super_L, XKeySym.XK_1, XKeySym.XK_2,
+                            XKeySym.XK_Control_L, XKeySym.XK_v), vncSession.server.receivedKeyDowns)
+        assertEquals(1, vncSession.server.receivedKeySyms.count { it == (XKeySym.XK_Super_L to false) })
+    }
+
+    @Test
+    fun clipboardTextBoxUsesDraftWithAutomaticSyncDisabled() {
+        targetPrefs.edit { putBoolean("clipboard_sync", false) }
+        vncSession.run {
+            onView(withId(R.id.pager)).perform(ViewPagerActions.scrollToLast(false))
+            onView(withId(R.id.text_box)).perform(replaceText("clipboard draft"))
+            onView(withId(R.id.text_clipboard_btn)).doClick()
+            onView(withText(R.string.title_clipboard_copy_only)).doClick()
+            pollingAssert { assertEquals("clipboard draft", vncSession.server.receivedCutText) }
+            onView(withId(R.id.text_box)).check(matches(withText("clipboard draft")))
+        }
+        assertEquals(emptyList<Int>(), vncSession.server.receivedKeyDowns)
     }
 
     @Test

@@ -96,6 +96,33 @@ class Messenger(private val client: VncClient) {
         execute { client.sendCutText(text) }
     }
 
+    /**
+     * Keep clipboard transfer, its settling delay, and the paste chord in one sender task.
+     * RFB has no acknowledgement that the focused application can paste the new selection.
+     */
+    fun sendTextViaClipboard(text: String, shortcut: PasteShortcut,
+                             onComplete: (VncClient.ClipboardSendResult) -> Unit): Boolean {
+        return execute {
+            val result = client.sendCutText(text, force = true, requireLossless = true)
+            if (result == VncClient.ClipboardSendResult.Sent && shortcut != PasteShortcut.CopyOnly) {
+                // Give the server's Wayland clipboard bridge time to publish the selection.
+                Thread.sleep(350)
+                if (!client.connected) {
+                    onComplete(VncClient.ClipboardSendResult.Unavailable)
+                    return@execute
+                }
+                try {
+                    shortcut.modifiers.forEach { client.sendKeyEvent(it, 0, true) }
+                    client.sendKeyEvent(shortcut.keySym, 0, true)
+                } finally {
+                    client.sendKeyEvent(shortcut.keySym, 0, false)
+                    shortcut.modifiers.asReversed().forEach { client.sendKeyEvent(it, 0, false) }
+                }
+            }
+            onComplete(result)
+        }
+    }
+
     fun setDesktopSize(width: Int, height: Int) {
         execute { client.setDesktopSize(width, height) }
     }

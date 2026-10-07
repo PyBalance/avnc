@@ -200,6 +200,17 @@
     <string name="pref_toolbar_open_with_swipe">从边缘向内滑动来打开</string>
     <string name="title_connect_on_app_start">应用启动时自动连接</string>
     <string name="hint_send_text_to_server">发送文本到服务器</string>
+    <string name="title_send_via_clipboard">通过剪贴板发送文本</string>
+    <string name="title_clipboard_omarchy">复制并粘贴 · Omarchy（Win+V）</string>
+    <string name="title_clipboard_ctrl_v">复制并粘贴 · Ctrl+V</string>
+    <string name="title_clipboard_ctrl_shift_v">复制并粘贴 · Ctrl+Shift+V</string>
+    <string name="title_clipboard_shift_insert">复制并粘贴 · Shift+Insert</string>
+    <string name="title_clipboard_copy_only">仅复制到远端剪贴板</string>
+    <string name="msg_clipboard_text_empty">请先输入要发送的文本。</string>
+    <string name="msg_remote_clipboard_sent">剪贴板文本已发送到服务器。</string>
+    <string name="msg_remote_clipboard_paste_sent">剪贴板文本和粘贴快捷键已发送。如果没有显示，请聚焦远端文本框后再次粘贴。</string>
+    <string name="msg_remote_clipboard_unicode_unsupported">服务器尚未启用 UTF-8 剪贴板支持。文本已保留，未执行粘贴；发送中文和表情需要服务器支持 UTF-8 剪贴板。</string>
+    <string name="msg_remote_clipboard_failed">无法发送剪贴板文本。请检查连接和仅查看模式，输入内容已保留。</string>
     <string name="title_enable_wol">局域网唤醒</string>
     <string name="hint_wol_mac">MAC 地址</string>
     <string name="msg_wake_on_lan_help">局域网唤醒（Wake-on-LAN） 可用于远程启动一台计算机。 \n \n首先，在远程计算机上配置 WoL，然后在 AVNC 中启用它。 \n启用后，在连接到此服务器前，将自动发送 WoL 魔法数据包。</string>

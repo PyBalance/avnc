@@ -29,7 +29,9 @@ import android.widget.GridLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageButton
 import android.widget.ToggleButton
+import android.widget.Toast
 import androidx.appcompat.widget.AppCompatEditText
+import androidx.appcompat.widget.PopupMenu
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat.Type
@@ -38,6 +40,7 @@ import androidx.viewpager.widget.PagerAdapter
 import androidx.viewpager.widget.ViewPager
 import com.gaurav.avnc.R
 import com.gaurav.avnc.databinding.VirtualKeysBinding
+import com.gaurav.avnc.session.PasteShortcut
 import com.gaurav.avnc.ui.vnc.input.InputHandler
 import com.gaurav.avnc.util.AppPreferences
 import com.gaurav.avnc.util.addOnGlobalLayoutListener
@@ -64,6 +67,7 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
     private val keyCharMap by lazy { KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD) }
     private var openedWithKb = false
     private var closedByPiPMode = false
+    private val pressedSuperKeys = mutableSetOf<Int>()
 
     val container: View? get() = stub.root
 
@@ -114,12 +118,24 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
 
     private fun releaseUnlockedMetaKeys() {
         toggleKeys.forEach {
-            if (it.isChecked && !lockedToggleKeys.contains(it))
+            // Super stays active for repeated workspace/clipboard shortcuts until explicitly released.
+            if (it.isChecked && it.tag != VirtualKey.LeftSuper && !lockedToggleKeys.contains(it))
                 it.isChecked = false
         }
     }
 
     private fun onAfterKeyEvent(event: KeyEvent) {
+        if (event.keyCode == KeyEvent.KEYCODE_META_LEFT || event.keyCode == KeyEvent.KEYCODE_META_RIGHT) {
+            if (event.action == KeyEvent.ACTION_DOWN) pressedSuperKeys.add(event.keyCode)
+            else if (event.action == KeyEvent.ACTION_UP) pressedSuperKeys.remove(event.keyCode)
+            (stub.binding as? VirtualKeysBinding)?.let { binding ->
+                val visible = pressedSuperKeys.isNotEmpty()
+                if (binding.superKeys.isVisible != visible) {
+                    binding.superKeys.isVisible = visible
+                    binding.keysPage.post { binding.keysPage.scrollTo(0, 0) }
+                }
+            }
+        }
         if (event.action == KeyEvent.ACTION_UP && !KeyEvent.isModifierKey(event.keyCode))
             releaseUnlockedMetaKeys()
     }
@@ -154,7 +170,7 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
      */
     private fun initPager(binding: VirtualKeysBinding) {
         val root = binding.root
-        val keys = binding.keys
+        val keys = binding.keysHost
         val pager = binding.pager
         val pages = listOf(binding.keysPage, binding.textPage)
 
@@ -227,13 +243,43 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
         binding.textBox.onTextCopyListener = {
             viewModel.sendClipboardText()
         }
-
+        binding.textClipboardBtn.setOnClickListener { anchor ->
+            val shortcuts = listOf(
+                    R.string.title_clipboard_omarchy to PasteShortcut.Omarchy,
+                    R.string.title_clipboard_ctrl_v to PasteShortcut.CtrlV,
+                    R.string.title_clipboard_ctrl_shift_v to PasteShortcut.CtrlShiftV,
+                    R.string.title_clipboard_shift_insert to PasteShortcut.ShiftInsert,
+                    R.string.title_clipboard_copy_only to PasteShortcut.CopyOnly)
+            PopupMenu(activity, anchor).apply {
+                shortcuts.forEachIndexed { index, (title, _) -> menu.add(0, index, index, title) }
+                setOnMenuItemClickListener { item ->
+                    val text = binding.textBox.text?.toString().orEmpty()
+                    if (text.isEmpty()) {
+                        Toast.makeText(activity, R.string.msg_clipboard_text_empty, Toast.LENGTH_SHORT).show()
+                    } else {
+                        releaseMetaKeys()
+                        viewModel.sendTextViaClipboard(text, shortcuts[item.itemId].second)
+                    }
+                    // Keep the draft so a failed paste can be retried without retyping it.
+                    true
+                }
+                show()
+            }
+        }
     }
 
     private fun initKeys(binding: VirtualKeysBinding) {
+        binding.superKeys.rowCount = pref.input.vkRowCount
+        listOf(VirtualKey.Num1, VirtualKey.Num2, VirtualKey.Num3, VirtualKey.Num4, VirtualKey.Num5,
+               VirtualKey.C, VirtualKey.V, VirtualKey.Space, VirtualKey.Enter).forEach { vk ->
+            val view = VirtualKeyViewFactory.create(binding.root.context, vk)
+            binding.superKeys.addView(view)
+            initNormalKey(view, vk.keyCode!!)
+        }
         binding.keys.rowCount = pref.input.vkRowCount
         VirtualKeyLayoutConfig.getLayout(pref).forEach { vk ->
             val view = VirtualKeyViewFactory.create(binding.root.context, vk)
+            view.tag = vk
             binding.keys.addView(view)
 
             if (vk == VirtualKey.ToggleKeyboard) {
@@ -375,6 +421,16 @@ enum class VirtualKey(
     LeftCtrl(keyCode = KeyEvent.KEYCODE_CTRL_LEFT, label = "Ctrl", isToggle = true),
     LeftAlt(keyCode = KeyEvent.KEYCODE_ALT_LEFT, label = "Alt", isToggle = true),
     LeftSuper(keyCode = KeyEvent.KEYCODE_META_LEFT, label = "Super", icon = R.drawable.ic_super_key, isToggle = true),
+
+    Num1(keyCode = KeyEvent.KEYCODE_1, label = "1"),
+    Num2(keyCode = KeyEvent.KEYCODE_2, label = "2"),
+    Num3(keyCode = KeyEvent.KEYCODE_3, label = "3"),
+    Num4(keyCode = KeyEvent.KEYCODE_4, label = "4"),
+    Num5(keyCode = KeyEvent.KEYCODE_5, label = "5"),
+    C(keyCode = KeyEvent.KEYCODE_C, label = "c"),
+    V(keyCode = KeyEvent.KEYCODE_V, label = "v"),
+    Space(keyCode = KeyEvent.KEYCODE_SPACE),
+    Enter(keyCode = KeyEvent.KEYCODE_ENTER),
 
     Esc(keyCode = KeyEvent.KEYCODE_ESCAPE),
     Tab(keyCode = KeyEvent.KEYCODE_TAB),

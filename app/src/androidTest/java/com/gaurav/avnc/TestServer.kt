@@ -19,6 +19,10 @@ import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.util.concurrent.LinkedTransferQueue
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.zip.InflaterInputStream
+import java.io.ByteArrayInputStream
+import java.io.DataInputStream
 import javax.crypto.Cipher
 import javax.crypto.KeyAgreement
 import javax.crypto.SecretKeyFactory
@@ -39,7 +43,7 @@ import kotlin.random.Random
  * It also enables us to completely control the behaviour of the server,
  * so we can simulate different scenarios, error conditions etc.
  */
-class TestServer(name: String = "Friends") {
+class TestServer(name: String = "Friends", private val utf8Clipboard: Boolean = false) {
 
     //Protocol config
     private var protocol = "RFB 003.008\n"
@@ -65,9 +69,11 @@ class TestServer(name: String = "Friends") {
     private var stopRequested = false
 
     //Event log
-    val receivedKeySyms = mutableListOf<Pair<Int, Boolean>>()
+    val receivedKeySyms = CopyOnWriteArrayList<Pair<Int, Boolean>>()
     val receivedKeyDowns get() = receivedKeySyms.filter { it.second }.map { it.first }
     var receivedCutText = ""; private set
+    val receivedClipboardTexts = CopyOnWriteArrayList<String>()
+    val receivedInputMessages = CopyOnWriteArrayList<Int>()
     var receivedIncrementalUpdateRequests = 0; private set
 
 
@@ -220,6 +226,7 @@ class TestServer(name: String = "Friends") {
 
                     // Record it
                     receivedKeySyms.add(Pair(key, isDown))
+                    receivedInputMessages.add(4)
                 }
 
                 0 -> input.skip(19) //SetPixelFormat
@@ -230,15 +237,33 @@ class TestServer(name: String = "Friends") {
                     input.skip(1) //padding
                     val encodingCount = input.read().shl(8) + input.read()
                     input.skip(encodingCount * 4L)
+                    if (utf8Clipboard) {
+                        output.write(byteArrayOf(3, 0, 0, 0))
+                        output.write(toByteArray(-8))
+                        output.write(toByteArray(0x1f000001)) // Caps, Request, Peek, Notify, Provide, Text
+                        output.write(toByteArray(1 shl 20)) // Max unsolicited text size
+                    }
                 }
 
                 6 -> { //ClientCutText
                     input.skip(3)//padding
                     val length = readInt(input)
-                    val textBuffer = ByteArray(length)
-                    val read = input.read(textBuffer)
-                    check(read == length)
-                    receivedCutText = textBuffer.toString(StandardCharsets.ISO_8859_1)
+                    val textBuffer = ByteArray(kotlin.math.abs(length))
+                    DataInputStream(input).readFully(textBuffer)
+                    if (length >= 0) {
+                        receivedCutText = textBuffer.toString(StandardCharsets.ISO_8859_1)
+                    } else {
+                        val flags = ByteBuffer.wrap(textBuffer).int
+                        if (flags and 0x10000000 == 0) continue // Ignore capability/notify messages
+                        val compressed = ByteArrayInputStream(textBuffer, 4, textBuffer.size - 4)
+                        DataInputStream(InflaterInputStream(compressed)).use { data ->
+                            val text = ByteArray(data.readInt())
+                            data.readFully(text)
+                            receivedCutText = text.copyOf(text.size - 1).toString(StandardCharsets.UTF_8)
+                        }
+                    }
+                    receivedClipboardTexts.add(receivedCutText)
+                    receivedInputMessages.add(6)
                 }
 
                 -1 -> break //EOF
