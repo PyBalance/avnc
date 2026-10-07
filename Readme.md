@@ -6,6 +6,8 @@
 
 This fork adds clipboard-based text sending and persistent Super/Win shortcuts for Omarchy.
 See [使用说明、安装需求与验证方式](docs/omarchy-upgrade.zh-CN.md).
+Installable debug APKs are available as artifacts from successful fork
+[pull request builds](https://github.com/PyBalance/avnc/actions/workflows/pr.yml).
 
 -------------------------------------------------------------------------------
 
