@@ -25,8 +25,8 @@ import org.junit.Before
 /**
  * Helper class to test a VNC session using [TestServer]
  */
-class VncSessionScenario {
-    val server = TestServer()
+class VncSessionScenario(utf8Clipboard: Boolean = false) {
+    val server = TestServer(utf8Clipboard = utf8Clipboard)
     val profile = ServerProfile(host = server.host, port = server.port)
     var activityScenario: ActivityScenario<VncActivity>? = null
 

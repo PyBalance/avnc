@@ -155,6 +155,12 @@ fun setClipboardText(text: String) = runOnMainSync {
             .setPrimaryClip(ClipData.newPlainText(null, text))
 }
 
+/** Android 13's copied-text preview can cover controls near the bottom of the viewer. */
+fun closeSystemDialogs() {
+    val result = instrumentation.uiAutomation.executeShellCommand("am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS")
+    android.os.ParcelFileDescriptor.AutoCloseInputStream(result).use { it.readBytes() }
+}
+
 fun setClipboardHtml(text: String) = runOnMainSync {
     ContextCompat.getSystemService(targetContext, ClipboardManager::class.java)!!
             .setPrimaryClip(ClipData.newHtmlText(null, text, text))

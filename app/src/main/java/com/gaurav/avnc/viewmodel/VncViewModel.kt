@@ -311,43 +311,70 @@ class VncViewModel(app: Application) : BaseViewModel(app) {
      * Miscellaneous
      **************************************************************************/
 
-    fun sendClipboardText() {
-        if (pref.server.clipboardSync && connected) launchIO {
-            getClipboardText(app)?.let { messenger?.sendClipboardText(it) }
+    private var clipboardRevision = 0L
+    private var automaticClipboardBlocked = false
+    private var explicitClipboardActive = false
+
+    fun sendClipboardText(): Job? {
+        if (!pref.server.clipboardSync || !connected || automaticClipboardBlocked)
+            return null
+        val revision = clipboardRevision
+        return launchMain {
+            val text = getClipboardText(app)
+            // A focus-sync read can finish after the user explicitly sends a new draft.
+            if (revision == clipboardRevision && !automaticClipboardBlocked && text != null)
+                messenger?.sendClipboardText(text)
         }
     }
 
     /** An explicit transfer uses the text box, independently of automatic clipboard sync. */
     fun sendTextViaClipboard(text: String, shortcut: PasteShortcut) {
-        val queued = messenger?.sendTextViaClipboard(text, shortcut) { result ->
-            launchMain {
-                val message = when (result) {
-                    VncClient.ClipboardSendResult.Sent ->
-                        if (shortcut == PasteShortcut.CopyOnly) R.string.msg_remote_clipboard_sent
-                        else R.string.msg_remote_clipboard_paste_sent
-                    VncClient.ClipboardSendResult.UnsupportedText -> R.string.msg_remote_clipboard_unicode_unsupported
-                    else -> R.string.msg_remote_clipboard_failed
+        val revision = ++clipboardRevision
+        automaticClipboardBlocked = true
+        explicitClipboardActive = true
+        launchMain prepare@{
+            // Finish any older server-to-phone write before replacing the phone clipboard.
+            clipReceiverJob?.join()
+            if (revision != clipboardRevision) return@prepare
+            val localCopied = setClipboardText(app, text)
+            if (revision != clipboardRevision) return@prepare
+            val queued = messenger?.sendTextViaClipboard(text, shortcut) { result ->
+                launchMain complete@{
+                    if (revision != clipboardRevision) return@complete
+                    explicitClipboardActive = false
+                    // If Android refused the write, do not re-send its stale clipboard on focus.
+                    automaticClipboardBlocked = !localCopied
+                    val message = when (result) {
+                        VncClient.ClipboardSendResult.Sent ->
+                            if (shortcut == PasteShortcut.CopyOnly) R.string.msg_remote_clipboard_sent
+                            else R.string.msg_remote_clipboard_paste_sent
+                        VncClient.ClipboardSendResult.UnsupportedText -> R.string.msg_remote_clipboard_unicode_unsupported
+                        else -> R.string.msg_remote_clipboard_failed
+                    }
+                    Toast.makeText(app, message, Toast.LENGTH_LONG).show()
                 }
-                Toast.makeText(app, message, Toast.LENGTH_LONG).show()
+            } == true
+            if (!queued) {
+                explicitClipboardActive = false
+                automaticClipboardBlocked = !localCopied
+                Toast.makeText(app, R.string.msg_remote_clipboard_failed, Toast.LENGTH_LONG).show()
             }
-        } == true
-        if (!queued) Toast.makeText(app, R.string.msg_remote_clipboard_failed, Toast.LENGTH_LONG).show()
+        }
     }
 
     private var clipReceiverJob: Job? = null
     private fun receiveClipboardText(text: String) {
-        if (!pref.server.clipboardSync)
-            return
+        // The receiver thread must join the same Main-thread ordering as explicit clipboard sends.
+        launchMain receiver@{
+            if (!pref.server.clipboardSync || explicitClipboardActive)
+                return@receiver
 
-        // This is a protective measure against servers which send every 'selection' made on the server.
-        // Setting clip text involves IPC, so these events can exhaust Binder resources, leading to ANRs.
-        if (clipReceiverJob?.isActive == true) {
-            Log.w(javaClass.simpleName, "Dropping clip text received from server, previous text is still pending")
-            return
-        }
-
-        clipReceiverJob = launchIO {
-            setClipboardText(app, text)
+            // Servers may send every selection change; do not flood Android's clipboard IPC.
+            if (clipReceiverJob?.isActive == true) {
+                Log.w(javaClass.simpleName, "Dropping clip text received from server, previous text is still pending")
+                return@receiver
+            }
+            clipReceiverJob = launchMain { setClipboardText(app, text) }
         }
     }
 

@@ -6,6 +6,7 @@ import com.gaurav.avnc.pollingAssert
 import com.gaurav.avnc.vnc.VncClient
 import com.gaurav.avnc.vnc.VncClient.ClipboardSendResult
 import com.gaurav.avnc.vnc.VncClientTest.TestObserver
+import com.gaurav.avnc.vnc.XKeySym
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -51,6 +52,23 @@ class LiveClipboardPasteTest {
                 assertEquals(initialText.length + text.length, pasted.length)
                 assertEquals(initialText, pasted.replaceFirst(text, ""))
             }
+
+            assertEquals("true", readProbe(probe, "focused"))
+            val beforeDelete = readProbe(probe, "text")
+            try {
+                assertTrue(messenger.sendKey(XKeySym.XK_BackSpace, 0, true))
+                Thread.sleep(1100)
+            } finally {
+                messenger.sendKey(XKeySym.XK_BackSpace, 0, false)
+            }
+            pollingAssert {
+                assertTrue("A held physical-style Backspace must delete repeatedly",
+                           readProbe(probe, "text").length < beforeDelete.length - 1)
+            }
+            Thread.sleep(150)
+            val stopped = readProbe(probe, "text")
+            Thread.sleep(250)
+            assertEquals("Deletion must stop after key-up", stopped, readProbe(probe, "text"))
         } finally {
             messenger.shutdown()
             client.cleanup()

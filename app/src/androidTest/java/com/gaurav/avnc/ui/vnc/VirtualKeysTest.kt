@@ -9,6 +9,9 @@
 package com.gaurav.avnc.ui.vnc
 
 import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.View
+import android.os.SystemClock
 import androidx.core.content.edit
 import androidx.test.espresso.Espresso.onIdle
 import androidx.test.espresso.Espresso.onView
@@ -29,6 +32,7 @@ import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.gaurav.avnc.CleanPrefsRule
 import com.gaurav.avnc.R
+import com.gaurav.avnc.databinding.VirtualKeysBinding
 import com.gaurav.avnc.VncSessionScenario
 import com.gaurav.avnc.VncSessionTest
 import com.gaurav.avnc.checkIsDisplayed
@@ -41,13 +45,19 @@ import com.gaurav.avnc.doLongClick
 import com.gaurav.avnc.doTypeText
 import com.gaurav.avnc.runOnMainSync
 import com.gaurav.avnc.pollingAssert
+import com.gaurav.avnc.getClipboardText
+import com.gaurav.avnc.setClipboardText
+import com.gaurav.avnc.closeSystemDialogs
 import com.gaurav.avnc.targetContext
 import com.gaurav.avnc.targetPrefs
 import com.gaurav.avnc.util.AppPreferences
 import com.gaurav.avnc.vnc.XKeySym
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Assert.assertEquals
 import org.junit.Rule
+import org.junit.rules.ExternalResource
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -57,6 +67,13 @@ class VirtualKeysTest : VncSessionTest() {
     @JvmField
     @Rule
     val prefsRule = CleanPrefsRule()
+
+    @JvmField
+    @Rule
+    val clipboardOverlayRule = object : ExternalResource() {
+        override fun before() = closeSystemDialogs()
+        override fun after() = closeSystemDialogs()
+    }
 
     @Test
     fun basicTest() {
@@ -247,6 +264,107 @@ class VirtualKeysTest : VncSessionTest() {
             onView(withId(R.id.text_box)).check(matches(withText("clipboard draft")))
         }
         assertEquals(emptyList<Int>(), vncSession.server.receivedKeyDowns)
+    }
+
+    @Test
+    fun explicitClipboardMustSurviveAutomaticFocusSync() {
+        val draft = "new clipboard draft"
+        targetPrefs.edit { putBoolean("clipboard_sync", true) }
+        vncSession.run {
+            setClipboardText("stale phone clipboard")
+            closeSystemDialogs()
+            onView(withId(R.id.pager)).perform(ViewPagerActions.scrollToLast(false))
+            onView(withId(R.id.text_box)).perform(replaceText(draft))
+            onView(withId(R.id.text_clipboard_btn)).doClick()
+            onView(withText(R.string.title_clipboard_copy_only)).doClick()
+            pollingAssert { Assert.assertTrue(vncSession.server.receivedClipboardTexts.contains(draft)) }
+            pollingAssert { assertEquals(draft, getClipboardText()) }
+            var sync: Job? = null
+            pollingAssert {
+                vncSession.onActivity { sync = it.viewModel.sendClipboardText() }
+                Assert.assertNotNull(sync)
+            }
+            runBlocking { sync?.join() }
+            // A sender-queue marker ensures the focus-sync packet has been processed by the server.
+            vncSession.onActivity {
+                it.viewModel.messenger?.sendKey(XKeySym.XK_F12, 0, true)
+                it.viewModel.messenger?.sendKey(XKeySym.XK_F12, 0, false)
+            }
+            pollingAssert { Assert.assertTrue(XKeySym.XK_F12 in vncSession.server.receivedKeyDowns) }
+            assertEquals(draft, vncSession.server.receivedCutText)
+        }
+        assertEquals(draft, vncSession.server.receivedCutText)
+    }
+
+    @Test
+    fun backspaceHasOnePressAndOneReleaseWhenHeld() {
+        vncSession.run {
+            onView(withContentDescription("Backspace")).checkWillBeDisplayed().doLongClick()
+        }
+        assertEquals(listOf(XKeySym.XK_BackSpace to true, XKeySym.XK_BackSpace to false),
+                     vncSession.server.receivedKeySyms.toList())
+    }
+
+    @Test
+    fun unicodeDraftSurvivesDefaultClipboardSync() {
+        vncSession.server.stop()
+        val session = VncSessionScenario(utf8Clipboard = true)
+        val draft = "中文验证😀\nsecond line"
+        session.run {
+            setClipboardText("old phone text")
+            closeSystemDialogs()
+            onView(withId(R.id.pager)).perform(ViewPagerActions.scrollToLast(false))
+            onView(withId(R.id.text_box)).perform(replaceText(draft))
+            onView(withId(R.id.text_clipboard_btn)).doClick()
+            onView(withText(R.string.title_clipboard_copy_only)).doClick()
+            pollingAssert { assertEquals(draft, session.server.receivedCutText) }
+            pollingAssert { assertEquals(draft, getClipboardText()) }
+            var sync: Job? = null
+            pollingAssert {
+                session.onActivity { sync = it.viewModel.sendClipboardText() }
+                Assert.assertNotNull(sync)
+            }
+            runBlocking { sync?.join() }
+            session.onActivity {
+                it.viewModel.messenger?.sendKey(XKeySym.XK_F12, 0, true)
+                it.viewModel.messenger?.sendKey(XKeySym.XK_F12, 0, false)
+            }
+            pollingAssert { Assert.assertTrue(XKeySym.XK_F12 in session.server.receivedKeyDowns) }
+            assertEquals(draft, session.server.receivedCutText)
+        }
+        assertEquals(draft, session.server.receivedCutText)
+    }
+
+    @Test
+    fun cancelAndHideReleaseHeldBackspace() {
+        vncSession.run {
+            onView(withContentDescription("Backspace")).checkWillBeDisplayed()
+            vncSession.onActivity { activity ->
+                val binding = activity.binding.virtualKeysStub.binding as VirtualKeysBinding
+                val key = binding.keys.findViewWithTag<View>(VirtualKey.Backspace)
+                val now = SystemClock.uptimeMillis()
+                listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_DOWN).forEach { action ->
+                    MotionEvent.obtain(now, now, action, 1f, 1f, 0).let {
+                        key.dispatchTouchEvent(it)
+                        it.recycle()
+                    }
+                }
+                activity.virtualKeys.hide()
+            }
+        }
+        assertEquals(listOf(XKeySym.XK_BackSpace to true, XKeySym.XK_BackSpace to false,
+                            XKeySym.XK_BackSpace to true, XKeySym.XK_BackSpace to false),
+                     vncSession.server.receivedKeySyms.toList())
+    }
+
+    @Test
+    fun savedLayoutGetsBackspaceOnceAndRemainsEditable() {
+        targetPrefs.edit { putString("vk_keys_layout", "Tab,LeftCtrl") }
+        var prefs = runOnMainSync { AppPreferences(targetContext) }
+        assertEquals(listOf(VirtualKey.Backspace, VirtualKey.Tab, VirtualKey.LeftCtrl), VirtualKeyLayoutConfig.getLayout(prefs))
+        targetPrefs.edit { putString("vk_keys_layout", "Tab,LeftCtrl") }
+        prefs = runOnMainSync { AppPreferences(targetContext) }
+        assertEquals(listOf(VirtualKey.Tab, VirtualKey.LeftCtrl), VirtualKeyLayoutConfig.getLayout(prefs))
     }
 
     @Test

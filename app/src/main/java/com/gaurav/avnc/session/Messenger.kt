@@ -93,7 +93,7 @@ class Messenger(private val client: VncClient) {
      **************************************************************************/
 
     fun sendClipboardText(text: String) {
-        execute { client.sendCutText(text) }
+        execute { client.sendCutText(text, requireLossless = true) }
     }
 
     /**

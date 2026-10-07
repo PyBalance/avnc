@@ -179,5 +179,12 @@ class AppPreferences(context: Context) {
             }
             putBoolean("run_info_right_meta_keys_migrated", true)
         }
+        if (!prefs.getBoolean("run_info_backspace_added", false)) prefs.edit {
+            prefs.getString("vk_keys_layout", null)?.let { layout ->
+                if ("Backspace" !in layout.split(','))
+                    putString("vk_keys_layout", "Backspace,$layout")
+            }
+            putBoolean("run_info_backspace_added", true)
+        }
     }
 }

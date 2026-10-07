@@ -64,6 +64,7 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
     private val stub = activity.binding.virtualKeysStub
     private val toggleKeys = mutableSetOf<ToggleButton>()
     private val lockedToggleKeys = mutableSetOf<ToggleButton>()
+    private val heldKeys = mutableMapOf<View, Int>()
     private val keyCharMap by lazy { KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD) }
     private var openedWithKb = false
     private var closedByPiPMode = false
@@ -78,6 +79,7 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
     }
 
     fun hide(saveVisibility: Boolean = false) {
+        releaseHeldKeys()
         // A persistent Super must not remain held when its release button is hidden.
         toggleKeys.filter { it.tag == VirtualKey.LeftSuper && it.isChecked }.forEach { it.isChecked = false }
         container?.visibility = View.GONE
@@ -112,6 +114,7 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
     }
 
     fun releaseMetaKeys() {
+        releaseHeldKeys()
         toggleKeys.forEach {
             if (it.isChecked)
                 it.isChecked = false
@@ -320,8 +323,52 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
 
     private fun initNormalKey(key: View, keyCode: Int) {
         check(key !is ToggleButton) { "use initToggleKey()" }
+        if (keyCode == KeyEvent.KEYCODE_DEL || keyCode == KeyEvent.KEYCODE_FORWARD_DEL) {
+            initHeldKey(key, keyCode)
+            return
+        }
         key.setOnClickListener { sendKey(keyCode) }
         makeKeyRepeatable(key)
+    }
+
+    /** Hold the key down so the remote OS performs normal keyboard autorepeat. */
+    @SuppressLint("ClickableViewAccessibility")
+    private fun initHeldKey(key: View, keyCode: Int) {
+        // Accessibility clicks have no touch sequence and still perform one full keystroke.
+        key.setOnClickListener { if (key !in heldKeys) sendKey(keyCode) }
+        key.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    if (key !in heldKeys) {
+                        heldKeys[key] = keyCode
+                        key.isPressed = true
+                        sendKey(keyCode, true)
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (key in heldKeys) {
+                        key.performClick() // Announce the click without emitting another deletion.
+                        heldKeys.remove(key)
+                        sendKey(keyCode, false)
+                    }
+                    key.isPressed = false
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    heldKeys.remove(key)?.let { sendKey(it, false) }
+                    key.isPressed = false
+                }
+            }
+            true
+        }
+    }
+
+    private fun releaseHeldKeys() {
+        val keys = heldKeys.toMap()
+        heldKeys.clear()
+        keys.forEach { (view, keyCode) ->
+            view.isPressed = false
+            sendKey(keyCode, false)
+        }
     }
 
     /**
@@ -433,6 +480,7 @@ enum class VirtualKey(
     V(keyCode = KeyEvent.KEYCODE_V, label = "v"),
     Space(keyCode = KeyEvent.KEYCODE_SPACE),
     Enter(keyCode = KeyEvent.KEYCODE_ENTER),
+    Backspace(keyCode = KeyEvent.KEYCODE_DEL, label = "⌫", description = "Backspace"),
 
     Esc(keyCode = KeyEvent.KEYCODE_ESCAPE),
     Tab(keyCode = KeyEvent.KEYCODE_TAB),
@@ -469,7 +517,7 @@ enum class VirtualKey(
  */
 object VirtualKeyLayoutConfig {
 
-    private val DEFAULT_LAYOUT = listOf(VirtualKey.ToggleKeyboard, VirtualKey.CloseKeys, VirtualKey.Esc, VirtualKey.LeftSuper,
+    private val DEFAULT_LAYOUT = listOf(VirtualKey.Backspace, VirtualKey.ToggleKeyboard, VirtualKey.CloseKeys, VirtualKey.Esc, VirtualKey.LeftSuper,
                                         VirtualKey.Tab, VirtualKey.LeftCtrl, VirtualKey.LeftShift, VirtualKey.LeftAlt,
                                         VirtualKey.Home, VirtualKey.Left, VirtualKey.Up, VirtualKey.Down, VirtualKey.End,
                                         VirtualKey.Right, VirtualKey.PgUp, VirtualKey.PgDn)
@@ -547,7 +595,10 @@ object VirtualKeyViewFactory {
                     }
         else
             Button(context, null, 0, selectStyle(key))
-                    .apply { text = getLabel(key) }
+                    .apply {
+                        text = getLabel(key)
+                        key.description?.let { contentDescription = it }
+                    }
     }
 
     private fun createToggle(context: Context, key: VirtualKey): View {

@@ -17,7 +17,7 @@ android {
         applicationId = "com.gaurav.avnc"
         minSdk = 21
         targetSdk = 36
-        versionCode = 53
+        versionCode = 54
         versionName = "3.3.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -49,7 +49,7 @@ android {
 
         debug {
             applicationIdSuffix = ".debug"
-            versionNameSuffix = " (debug)"
+            versionNameSuffix = "-omarchy.2 (debug)"
         }
 
         release {
