@@ -71,6 +71,7 @@ class TestServer(name: String = "Friends", private val utf8Clipboard: Boolean = 
     //Event log
     val receivedKeySyms = CopyOnWriteArrayList<Pair<Int, Boolean>>()
     val receivedKeyDowns get() = receivedKeySyms.filter { it.second }.map { it.first }
+    @Volatile
     var receivedCutText = ""; private set
     val receivedClipboardTexts = CopyOnWriteArrayList<String>()
     val receivedInputMessages = CopyOnWriteArrayList<Int>()

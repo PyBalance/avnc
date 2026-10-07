@@ -4,6 +4,9 @@
 
 <p align="center"> <b>AVNC</b> is a VNC client for Android. </p>
 
+This fork adds clipboard-based text sending and persistent Super/Win shortcuts for Omarchy.
+See [使用说明、安装需求与验证方式](docs/omarchy-upgrade.zh-CN.md).
+
 -------------------------------------------------------------------------------
 
 
