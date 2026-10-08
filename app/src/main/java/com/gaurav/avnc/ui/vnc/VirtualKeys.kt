@@ -533,7 +533,7 @@ enum class VirtualKey(
     X(keyCode = KeyEvent.KEYCODE_X, label = "X"),
     Space(keyCode = KeyEvent.KEYCODE_SPACE),
     Enter(keyCode = KeyEvent.KEYCODE_ENTER),
-    Backspace(keyCode = KeyEvent.KEYCODE_DEL, label = "⌫", description = "Backspace"),
+    Backspace(keyCode = KeyEvent.KEYCODE_DEL, label = "⌫", icon = R.drawable.ic_keyboard_backspace, description = "Backspace"),
 
     Esc(keyCode = KeyEvent.KEYCODE_ESCAPE),
     Tab(keyCode = KeyEvent.KEYCODE_TAB),
@@ -684,6 +684,13 @@ object VirtualKeyViewFactory {
  * Simple extension to add hook for Copy action.
  */
 class VkEditText(context: Context, attributeSet: AttributeSet? = null) : AppCompatEditText(context, attributeSet) {
+
+    init {
+        // inputType=textMultiLine resets XML's line/scroll flags during inflation.
+        // Keep newlines in the draft, but display one compact, scrollable row.
+        maxLines = 1
+        setHorizontallyScrolling(true)
+    }
 
     var onTextCopyListener: (() -> Unit)? = null
 

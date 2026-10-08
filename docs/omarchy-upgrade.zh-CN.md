@@ -24,6 +24,8 @@
 
 **⌫** 是退格，**Del** 是向后删除。删除键和方向键在触摸按住时只发送一次 down，由远端执行实体键盘式重复；松手、触摸取消、隐藏面板、切后台和断线会释放并清理。默认基础布局含退格；自定义布局可通过原编辑器自行添加，不自动重排已有布局。
 
+界面样式更新：文本页使用和小键盘一致的 34 dp 最小行高、正文文字及紧凑自然宽度按钮，无边框或输入底线。文字为黑色，模式选中时文字变紫色；按键面板采用浅色局部主题，避免夜间主题下黑字无法阅读。输入框保持单行显示及内部滚动，大字体的提示文字不会撑高多行。退格改为 24 dp 图标，与方向键图标一致，点击区沿用原来的 48 dp 最小宽度和 34 dp 最小高度。
+
 ## 受控 Omarchy 电脑需要什么
 
 这台电脑已经安装：`wayvnc 0.10.1`、`neatvnc 1.0.1`、`wl-clipboard` 和 `wtype`，也已配置 Super+V 通用粘贴，无需为新增功能补装它们。
@@ -36,7 +38,7 @@
 
 本地 `assembleDebug` 生成可直接安装的 `app-debug.apk`，不依赖原作者的签名密钥。它使用 `com.gaurav.avnc.debug`，可以与官方版并存；官方版服务器列表可通过导出/导入迁移。
 
-当前修复版的应用名称为 **AVNC Omarchy**，版本为 `3.3.1-omarchy.3 (debug)`（versionCode 55）。覆盖安装原调试版即可保留服务器配置；测试时请打开 AVNC Omarchy。
+当前修复版的应用名称为 **AVNC Omarchy**，版本为 `3.3.1-omarchy.4 (debug)`（versionCode 56）。覆盖安装原调试版即可保留服务器配置；测试时请打开 AVNC Omarchy。
 
 如需本地构建，安装以下组件（版本来自项目配置）：
 
@@ -68,7 +70,7 @@ cd ~/avnc
 mise exec java@temurin-17 -- ./gradlew assembleDebug assembleDebugAndroidTest
 ```
 
-调试 APK 位于 `app/build/outputs/apk/debug/app-debug.apk`，方案升级版复制到 `~/Downloads/AVNC-Omarchy-3.3.1-docx-upgrade.apk`，已通过签名校验、安装到本机 Waydroid，并通过 Taildrop 发送到 x200。
+调试 APK 位于 `app/build/outputs/apk/debug/app-debug.apk`，方案升级版复制到 `~/Downloads/AVNC-Omarchy-3.3.1-style-fix.apk`，已通过签名校验、安装到本机 Waydroid，并通过 Taildrop 发送到 x200。
 
 验证结果（2026-10-08）：
 
@@ -78,6 +80,7 @@ mise exec java@temurin-17 -- ./gradlew assembleDebug assembleDebugAndroidTest
 - Android 13 的系统剪贴板浮层会遮挡测试底部按键。UI 测试在每项前后关闭浮层并临时关闭动画，结束后恢复；未改变 APK 运行行为。真实桌面验证使用临时回环服务与专用文本框，结束后关闭服务、移除转发并恢复原剪贴板及窗口焦点。
 - ARM64、ARM32、x86、x86_64 APK 已构建；x200 的实体设备横竖屏、触摸和实际应用粘贴仍需用户安装测试。
 - `lintDebug` 已执行，仍有 **254 项 MissingTranslation** 错误：234 项上游已有字符串，20 项本项目新增字符串缺少其他语言翻译。英文/简体中文已提供，其他语言回退英文；没有其他 Error/Fatal。完整 lint 未通过，APK 与测试 APK 构建通过。
+- 样式更新（`omarchy.4`）：VirtualKeysTest 与 VirtualKeysEditorTest **40 项**回归通过；核对中文 360 dp 和英文 320 dp / 2 倍字体的 Android 原生渲染图，文本面板无边框、黑色字、选中紫色字，常态两行高度与小键盘一致。样式回归报告为 `app/build/reports/style-fix-regression.txt`，界面图为 `app/build/reports/style-previews/`。
 - 本机报告：`app/build/reports/docx-regression.txt`、`docx-live-test.txt`、`docx-build.log` 和 `lint-results-debug.html`。
 
 `LiveClipboardPasteTest` 是需主动指定参数的实机集成测试，普通测试运行会跳过它。辅助脚本 `scripts/clipboard-paste-probe.py` 会打开临时 GTK 文本框，并在本机回环地址 `127.0.0.1:18081` 提供剪贴板和文本框读取接口。运行它需要 GTK 4 和 Python GObject；测试结束应关闭脚本并恢复剪贴板。

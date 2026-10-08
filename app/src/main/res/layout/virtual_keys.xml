@@ -16,6 +16,7 @@
         android:background="?colorSurface"
         android:backgroundTint="#cfff"
         android:backgroundTintMode="multiply"
+        android:theme="@style/ThemeOverlay.MaterialComponents.Light"
         android:contentDescription="Virtual Keys"
         tools:ignore="HardcodedText">
 
@@ -87,28 +88,25 @@
                     <ImageButton
                         android:id="@+id/text_page_back_btn"
                         style="@style/VirtualKey.Compact"
-                        android:layout_height="48dp"
+                        android:layout_height="wrap_content"
                         android:contentDescription="@string/desc_back_btn"
                         android:src="@drawable/ic_arrow_back"
-                        app:tint="?colorPrimary" />
+                        app:tint="@android:color/black" />
                     <com.google.android.material.button.MaterialButtonToggleGroup
                         android:id="@+id/text_mode_group"
-                        android:layout_width="0dp"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
                         app:singleSelection="true"
                         app:selectionRequired="true">
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/text_mode_keys"
                             style="@style/TextSendButton.Mode"
-                            android:layout_width="0dp"
-                            android:layout_weight="1"
+                            android:layout_width="wrap_content"
                             android:text="@string/title_text_mode_keys" />
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/text_mode_clipboard"
                             style="@style/TextSendButton.Mode"
-                            android:layout_width="0dp"
-                            android:layout_weight="1"
+                            android:layout_width="wrap_content"
                             android:text="@string/title_text_mode_clipboard" />
                     </com.google.android.material.button.MaterialButtonToggleGroup>
                 </LinearLayout>
@@ -119,9 +117,15 @@
                     <com.gaurav.avnc.ui.vnc.VkEditText
                         android:id="@+id/text_box"
                         android:layout_width="0dp"
-                        android:layout_height="48dp"
+                        android:layout_height="wrap_content"
+                        android:minHeight="34dp"
                         android:layout_weight="1"
                         android:gravity="center_vertical"
+                        android:background="@null"
+                        android:padding="2dp"
+                        android:textColor="@android:color/black"
+                        android:textColorHint="@android:color/black"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
                         android:maxLines="1"
                         android:scrollHorizontally="true"
                         android:hint="@string/hint_send_text_to_server"

@@ -644,6 +644,8 @@ class VirtualKeysTest : VncSessionTest() {
                             b.textPage.measure(View.MeasureSpec.makeMeasureSpec(pixels, View.MeasureSpec.EXACTLY),
                                                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
                             b.textPage.layout(0, 0, pixels, b.textPage.measuredHeight)
+                            Assert.assertTrue("The two-row panel must stay compact even with a long hint",
+                                b.textPage.height <= (68 * context.resources.displayMetrics.density * scale).toInt())
                             Assert.assertTrue("Draft must retain usable width ($locale $scale $width)",
                                               b.textBox.width >= (48 * context.resources.displayMetrics.density).toInt())
                             val buttons = if (clipboard) listOf(b.textCopyBtn, b.textClipboardBtn) else listOf(b.textSendBtn)
@@ -651,6 +653,21 @@ class VirtualKeysTest : VncSessionTest() {
                                 Assert.assertTrue("Button must fit inside its row", button.right <= (button.parent as View).width)
                                 Assert.assertTrue("Buttons retain minimum touch width", button.width >= (48 * context.resources.displayMetrics.density).toInt())
                                 Assert.assertTrue("Button text must not be clipped", button.layout.height + button.compoundPaddingTop + button.compoundPaddingBottom <= button.height)
+                            }
+                            // Optional native View renders for inspecting visual changes.
+                            if (androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("stylePreviews") == "true" &&
+                                ((width == 360 && scale == 1f) || (width == 320 && scale == 2f && locale == java.util.Locale.ENGLISH))) {
+                                b.textModeGroup.check(if (clipboard) R.id.text_mode_clipboard else R.id.text_mode_keys)
+                                b.textBox.setText(if (clipboard) "你好，Omarchy！" else "Abc@123")
+                                val bitmap = android.graphics.Bitmap.createBitmap(pixels, b.textPage.height, android.graphics.Bitmap.Config.ARGB_8888)
+                                val canvas = android.graphics.Canvas(bitmap)
+                                canvas.drawColor(android.graphics.Color.WHITE)
+                                b.textPage.draw(canvas)
+                                val directory = java.io.File(targetContext.getExternalFilesDir(null), "style-previews").apply { mkdirs() }
+                                java.io.File(directory, "${locale.language}-${width}-${scale}-${if (clipboard) "clipboard" else "keys"}.png").outputStream().use {
+                                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                                }
+                                bitmap.recycle()
                             }
                         }
                     }
