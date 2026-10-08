@@ -193,6 +193,7 @@ class LayoutManager(private val activity: VncActivity) {
      *
      ************************************************************************************/
     private var windowInsets = WindowInsetsCompat.Builder().build()
+    private var imeWasVisible = false
     private var virtualKeyInsets = Insets.NONE   // Insets caused by virtual keys
 
     private fun updateWindowInsets(insetsCompat: WindowInsetsCompat) {
@@ -237,8 +238,11 @@ class LayoutManager(private val activity: VncActivity) {
     }
 
     private fun applyOpaqueInsets(opaqueInsets: Insets) {
-        // Guess if IME is closing
-        if (!windowInsets.isVisible(Type.ime()) && rootView.paddingBottom != 0)
+        // Navigation bars also add bottom padding. Only an actual IME visibility
+        // transition may clear draft focus; opening the IME must not redirect typing.
+        val previouslyVisible = imeWasVisible
+        imeWasVisible = windowInsets.isVisible(Type.ime())
+        if (previouslyVisible && !imeWasVisible)
             activity.virtualKeys.onKeyboardClose()
 
         val insets = windowInsetsToViewInsets(opaqueInsets, rootView)

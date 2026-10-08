@@ -257,8 +257,8 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
         }
         binding.textModeGroup.check(if (viewModel.textSendMode == "clipboard") R.id.text_mode_clipboard else R.id.text_mode_keys)
         updateMode()
-        binding.textModeGroup.addOnButtonCheckedListener { _, id, checked ->
-            if (checked) {
+        binding.textModeGroup.setOnCheckedChangeListener { _, id ->
+            if (id != View.NO_ID) {
                 viewModel.textSendMode = if (id == R.id.text_mode_clipboard) "clipboard" else "keys"
                 updateMode()
             }

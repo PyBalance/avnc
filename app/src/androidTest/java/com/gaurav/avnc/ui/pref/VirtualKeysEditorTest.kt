@@ -24,6 +24,7 @@ import com.gaurav.avnc.R
 import com.gaurav.avnc.checkIsDisplayed
 import com.gaurav.avnc.checkWillBeDisplayed
 import com.gaurav.avnc.doClick
+import com.gaurav.avnc.closeSystemDialogs
 import com.gaurav.avnc.targetConfigContext
 import com.gaurav.avnc.targetPrefs
 import com.gaurav.avnc.ui.prefs.PrefsActivity
@@ -39,6 +40,7 @@ class VirtualKeysEditorTest {
     @Rule @JvmField val prefsRule = CleanPrefsRule()
 
     private fun openEditor(title: Int = R.string.pref_customize_virtual_keys) {
+        closeSystemDialogs()
         onView(withText(R.string.pref_input)).doClick()
         onView(withId(androidx.preference.R.id.recycler_view)).perform(
                 RecyclerViewActions.actionOnItem<RecyclerView.ViewHolder>(

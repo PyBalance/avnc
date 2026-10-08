@@ -24,7 +24,7 @@
 
 **⌫** 是退格，**Del** 是向后删除。删除键和方向键在触摸按住时只发送一次 down，由远端执行实体键盘式重复；松手、触摸取消、隐藏面板、切后台和断线会释放并清理。默认基础布局含退格；自定义布局可通过原编辑器自行添加，不自动重排已有布局。
 
-界面样式更新：文本页使用和小键盘一致的 34 dp 最小行高、正文文字及紧凑自然宽度按钮，无边框或输入底线。文字为黑色，模式选中时文字变紫色；按键面板采用浅色局部主题，避免夜间主题下黑字无法阅读。输入框保持单行显示及内部滚动，大字体的提示文字不会撑高多行。退格改为 24 dp 图标，与方向键图标一致，点击区沿用原来的 48 dp 最小宽度和 34 dp 最小高度。
+界面样式更新：文本页继续采用与小键盘一致的紧凑两行布局。输入框恢复 AVNC 原生 EditText 背景和底线：提示文字为原生灰色，输入文字为黑色，聚焦时底线采用主题紫色，保留单行显示及内部滚动。按键输入 / 剪贴板采用紧凑的分段选择器：共用浅灰底座，选中项为淡紫色圆角背景和紫色文字，未选中项为黑色文字；与下方无边框的发送操作按钮区分。模式切换只改变发送方式，保留共用草稿。退格仍采用与方向键一致的 24 dp 图标。
 
 ## 受控 Omarchy 电脑需要什么
 
@@ -38,7 +38,7 @@
 
 本地 `assembleDebug` 生成可直接安装的 `app-debug.apk`，不依赖原作者的签名密钥。它使用 `com.gaurav.avnc.debug`，可以与官方版并存；官方版服务器列表可通过导出/导入迁移。
 
-当前修复版的应用名称为 **AVNC Omarchy**，版本为 `3.3.1-omarchy.4 (debug)`（versionCode 56）。覆盖安装原调试版即可保留服务器配置；测试时请打开 AVNC Omarchy。
+当前修复版的应用名称为 **AVNC Omarchy**，版本为 `3.3.1-omarchy.6 (debug)`（versionCode 58）。覆盖安装原调试版即可保留服务器配置；测试时请打开 AVNC Omarchy。
 
 如需本地构建，安装以下组件（版本来自项目配置）：
 
@@ -70,7 +70,17 @@ cd ~/avnc
 mise exec java@temurin-17 -- ./gradlew assembleDebug assembleDebugAndroidTest
 ```
 
-调试 APK 位于 `app/build/outputs/apk/debug/app-debug.apk`，方案升级版复制到 `~/Downloads/AVNC-Omarchy-3.3.1-style-fix.apk`，已通过签名校验、安装到本机 Waydroid，并通过 Taildrop 发送到 x200。
+调试 APK 位于 `app/build/outputs/apk/debug/app-debug.apk`，方案升级版复制到 `~/Downloads/AVNC-Omarchy-3.3.1-gray-ui.apk`，可覆盖安装原调试版。
+
+本轮在 vivo X90 Pro+（Android 16 / API 36）通过 ADB 实测，使用独立测试包，避免测试清空正式包的服务器配置。输入框首次聚焦、模式切换保留草稿、按键发送不追加回车、退格键尺寸和按住释放均已核对。修复了系统导航栏底部留白被误判为键盘关闭的问题，避免首次弹出键盘时草稿框丢失焦点、输入直接转给远端。
+
+灰底样式更新（`omarchy.6`）验证：
+
+- Waydroid（API 33）的剪贴板、KeyHandler、VncClient、输入焦点及不同语言/字号/宽度布局共 **59 项**回归通过，报告为 `app/build/reports/gray-ui-focused-regression.txt`。
+- x90 真机操作检查通过，报告为 `app/build/reports/x90-manual-ui.txt`，实际界面截图为 `app/build/reports/x90-clipboard-portrait.png`。
+- x90 到本机 Omarchy / WayVNC 的 **1 项**实机集成测试通过：中文、emoji、多行文本进入远端剪贴板，仅复制不插入文本，Super+V 恰好粘贴一次；大小写/符号/空格/换行输入正确，长按退格重复删除且松开停止。报告为 `app/build/reports/x90-live-test.txt`。
+- 本轮全量 UI 运行出现触摸及浮层干扰，未计为通过；第二台 Waydroid 的图形服务亦出现 `DEAD_OBJECT`。聚焦回归和真机操作、真实远端验证分别执行。真机旋转测试受系统弹窗干扰，未计为完整通过。
+- APK 构建和签名校验通过；应用名称、包名和签名保持覆盖安装兼容。已通过 Taildrop 发送到 x200。
 
 验证结果（2026-10-08）：
 

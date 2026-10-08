@@ -677,6 +677,41 @@ class VirtualKeysTest : VncSessionTest() {
     }
 
     @Test
+    fun navigationInsetsDoNotClearDraftFocusButClosingImeDoes() {
+        vncSession.run {
+            onView(withId(R.id.pager)).perform(ViewPagerActions.scrollToLast(false))
+            vncSession.onActivity { activity ->
+                val b = activity.binding.virtualKeysStub.binding as VirtualKeysBinding
+                val decor = activity.window.decorView
+                val original = androidx.core.view.ViewCompat.getRootWindowInsets(decor)!!
+                val navigation = androidx.core.view.WindowInsetsCompat.Builder(original)
+                    .setInsets(androidx.core.view.WindowInsetsCompat.Type.navigationBars(), androidx.core.graphics.Insets.of(0, 0, 0, 80))
+                    .setVisible(androidx.core.view.WindowInsetsCompat.Type.navigationBars(), true)
+                    .setInsets(androidx.core.view.WindowInsetsCompat.Type.ime(), androidx.core.graphics.Insets.NONE)
+                    .setVisible(androidx.core.view.WindowInsetsCompat.Type.ime(), false).build()
+                fun dispatch(insets: androidx.core.view.WindowInsetsCompat) {
+                    androidx.core.view.ViewCompat.dispatchApplyWindowInsets(decor, insets)
+                    activity.binding.viewerRoot.viewTreeObserver.dispatchOnGlobalLayout()
+                }
+                try {
+                    dispatch(navigation)
+                    b.textBox.requestFocus()
+                    dispatch(navigation)
+                    Assert.assertTrue("Navigation padding must not move typing out of the draft", b.textBox.hasFocus())
+                    val keyboard = androidx.core.view.WindowInsetsCompat.Builder(navigation)
+                        .setInsets(androidx.core.view.WindowInsetsCompat.Type.ime(), androidx.core.graphics.Insets.of(0, 0, 0, 500))
+                        .setVisible(androidx.core.view.WindowInsetsCompat.Type.ime(), true).build()
+                    dispatch(keyboard)
+                    dispatch(navigation)
+                    Assert.assertFalse("A real keyboard close must still clear draft focus", b.textBox.hasFocus())
+                } finally {
+                    dispatch(original)
+                }
+            }
+        }
+    }
+
+    @Test
     fun unsupportedUnicodeLeavesDraftAndDoesNotRetryAsKeys() {
         targetPrefs.edit { putBoolean("clipboard_sync", false) }
         vncSession.run {

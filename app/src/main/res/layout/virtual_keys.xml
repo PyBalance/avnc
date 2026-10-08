@@ -92,23 +92,24 @@
                         android:contentDescription="@string/desc_back_btn"
                         android:src="@drawable/ic_arrow_back"
                         app:tint="@android:color/black" />
-                    <com.google.android.material.button.MaterialButtonToggleGroup
+                    <RadioGroup
                         android:id="@+id/text_mode_group"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        app:singleSelection="true"
-                        app:selectionRequired="true">
-                        <com.google.android.material.button.MaterialButton
+                        android:background="@drawable/bg_text_mode_group"
+                        android:padding="2dp"
+                        android:orientation="horizontal">
+                        <androidx.appcompat.widget.AppCompatRadioButton
                             android:id="@+id/text_mode_keys"
-                            style="@style/TextSendButton.Mode"
+                            style="@style/TextSendModeTab"
                             android:layout_width="wrap_content"
                             android:text="@string/title_text_mode_keys" />
-                        <com.google.android.material.button.MaterialButton
+                        <androidx.appcompat.widget.AppCompatRadioButton
                             android:id="@+id/text_mode_clipboard"
-                            style="@style/TextSendButton.Mode"
+                            style="@style/TextSendModeTab"
                             android:layout_width="wrap_content"
                             android:text="@string/title_text_mode_clipboard" />
-                    </com.google.android.material.button.MaterialButtonToggleGroup>
+                    </RadioGroup>
                 </LinearLayout>
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -121,10 +122,8 @@
                         android:minHeight="34dp"
                         android:layout_weight="1"
                         android:gravity="center_vertical"
-                        android:background="@null"
-                        android:padding="2dp"
+                        android:paddingTop="0dp"
                         android:textColor="@android:color/black"
-                        android:textColorHint="@android:color/black"
                         android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
                         android:maxLines="1"
                         android:scrollHorizontally="true"
