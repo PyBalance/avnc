@@ -314,6 +314,14 @@ class VncViewModel(app: Application) : BaseViewModel(app) {
     private var clipboardRevision = 0L
     private var automaticClipboardBlocked = false
     private var explicitClipboardActive = false
+    val clipboardSending = MutableLiveData(false)
+    // Session memory only: never save drafts in preferences, bundles or logs.
+    var textDraft = ""
+    var textSendMode = pref.runInfo.textSendMode ?: "keys"
+        set(value) {
+            field = value
+            pref.runInfo.textSendMode = value
+        }
 
     fun sendClipboardText(): Job? {
         if (!pref.server.clipboardSync || !connected || automaticClipboardBlocked)
@@ -328,10 +336,12 @@ class VncViewModel(app: Application) : BaseViewModel(app) {
     }
 
     /** An explicit transfer uses the text box, independently of automatic clipboard sync. */
-    fun sendTextViaClipboard(text: String, shortcut: PasteShortcut) {
+    fun sendTextViaClipboard(text: String, shortcut: PasteShortcut): Boolean {
+        if (text.isEmpty() || !connected || client?.inputEnabled != true || explicitClipboardActive) return false
         val revision = ++clipboardRevision
         automaticClipboardBlocked = true
         explicitClipboardActive = true
+        clipboardSending.value = true
         launchMain prepare@{
             // Finish any older server-to-phone write before replacing the phone clipboard.
             clipReceiverJob?.join()
@@ -342,6 +352,7 @@ class VncViewModel(app: Application) : BaseViewModel(app) {
                 launchMain complete@{
                     if (revision != clipboardRevision) return@complete
                     explicitClipboardActive = false
+                    clipboardSending.value = false
                     // If Android refused the write, do not re-send its stale clipboard on focus.
                     automaticClipboardBlocked = !localCopied
                     val message = when (result) {
@@ -351,15 +362,17 @@ class VncViewModel(app: Application) : BaseViewModel(app) {
                         VncClient.ClipboardSendResult.UnsupportedText -> R.string.msg_remote_clipboard_unicode_unsupported
                         else -> R.string.msg_remote_clipboard_failed
                     }
-                    Toast.makeText(app, message, Toast.LENGTH_LONG).show()
+                    Toast.makeText(app, message, Toast.LENGTH_SHORT).show()
                 }
             } == true
             if (!queued) {
                 explicitClipboardActive = false
+                clipboardSending.value = false
                 automaticClipboardBlocked = !localCopied
-                Toast.makeText(app, R.string.msg_remote_clipboard_failed, Toast.LENGTH_LONG).show()
+                Toast.makeText(app, R.string.msg_remote_clipboard_failed, Toast.LENGTH_SHORT).show()
             }
         }
+        return true
     }
 
     private var clipReceiverJob: Job? = null
@@ -512,6 +525,10 @@ class VncViewModel(app: Application) : BaseViewModel(app) {
         override fun onDisconnected() {
             // Block until main thread is synchronised with disconnected state
             runBlocking(Dispatchers.Main) {
+                ++clipboardRevision
+                explicitClipboardActive = false
+                clipboardSending.value = false
+                automaticClipboardBlocked = false
                 state.value = State.Disconnected
                 client = null
                 messenger = null

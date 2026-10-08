@@ -227,4 +227,13 @@
         <item>Item 2</item>
         <item>Item 3</item>
     </string-array>
+    <string-array name="clipboard_paste_shortcut_entries">
+        <item>@string/title_clipboard_omarchy</item>
+        <item>@string/title_clipboard_ctrl_v</item>
+        <item>@string/title_clipboard_ctrl_shift_v</item>
+        <item>@string/title_clipboard_shift_insert</item>
+    </string-array>
+    <string-array name="clipboard_paste_shortcut_values" translatable="false">
+        <item>Omarchy</item><item>CtrlV</item><item>CtrlShiftV</item><item>ShiftInsert</item>
+    </string-array>
 </resources>

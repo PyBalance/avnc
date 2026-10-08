@@ -2,6 +2,16 @@
 package com.gaurav.avnc.session
 
 import androidx.test.platform.app.InstrumentationRegistry
+import android.os.SystemClock
+import android.view.KeyCharacterMap
+import android.view.KeyEvent
+import com.gaurav.avnc.runOnMainSync
+import com.gaurav.avnc.targetContext
+import com.gaurav.avnc.ui.vnc.input.Dispatcher
+import com.gaurav.avnc.ui.vnc.input.KeyHandler
+import com.gaurav.avnc.util.AppPreferences
+import io.mockk.every
+import io.mockk.mockk
 import com.gaurav.avnc.pollingAssert
 import com.gaurav.avnc.vnc.VncClient
 import com.gaurav.avnc.vnc.VncClient.ClipboardSendResult
@@ -54,6 +64,26 @@ class LiveClipboardPasteTest {
             }
 
             assertEquals("true", readProbe(probe, "focused"))
+            val clipboardBeforeTyping = readProbe(probe, "clipboard")
+            val beforeTyping = readProbe(probe, "text")
+            val keyText = " Abc@123 #! "
+            val dispatcher = mockk<Dispatcher>()
+            every { dispatcher.onXKey(any(), any(), any()) } answers {
+                messenger.sendKey(firstArg(), secondArg(), thirdArg())
+            }
+            val keyHandler = KeyHandler(dispatcher, runOnMainSync { AppPreferences(targetContext) })
+            val keyEvents = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD).getEvents(keyText.toCharArray())!!
+            keyEvents.forEach { assertTrue(keyHandler.onKeyEvent(it)) }
+            pollingAssert {
+                val typed = readProbe(probe, "text")
+                assertEquals(beforeTyping.length + keyText.length, typed.length)
+                assertEquals(beforeTyping, typed.replaceFirst(keyText, ""))
+            }
+            // The Unicode fallback also has to turn an explicit draft newline into Enter.
+            assertTrue(keyHandler.onKeyEvent(KeyEvent(SystemClock.uptimeMillis(), "a\nb", 0, 0)))
+            pollingAssert { assertTrue(readProbe(probe, "text").contains("a\nb")) }
+            assertEquals("Key input must leave the remote clipboard unchanged", clipboardBeforeTyping, readProbe(probe, "clipboard"))
+
             val beforeDelete = readProbe(probe, "text")
             try {
                 assertTrue(messenger.sendKey(XKeySym.XK_BackSpace, 0, true))

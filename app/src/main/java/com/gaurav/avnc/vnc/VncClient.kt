@@ -80,6 +80,7 @@ class VncClient(private val observer: Observer) {
      * If true, all input to remote server is disabled
      */
     private val inputDisabled = AtomicBoolean(false)
+    val inputEnabled: Boolean get() = !inputDisabled.get()
 
     /**
      * If true, client stops sending framebuffer update requests to server

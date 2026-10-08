@@ -339,6 +339,7 @@ class VncActivity : AppCompatActivity() {
     }
 
     private fun onSessionDisconnected() {
+        virtualKeys.onDisconnected()
         binding.frameView.isVisible = false
         binding.frameView.keepScreenOn = false
         inputHandler.onSessionDisconnected()

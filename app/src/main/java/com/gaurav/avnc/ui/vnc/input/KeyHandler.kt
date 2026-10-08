@@ -177,8 +177,9 @@ class KeyHandler(private val dispatcher: Dispatcher, prefs: AppPreferences) {
 
                     // Here, only Unicode characters are available.
                     forEachCodePointOf(event.characters) {
-                        model.inEvents += InEvent(true, uChar = it)
-                        model.inEvents += InEvent(false, uChar = it)
+                        val code = if (it == '\n'.code) KeyEvent.KEYCODE_ENTER else 0
+                        model.inEvents += InEvent(true, keyCode = code, uChar = it)
+                        model.inEvents += InEvent(false, keyCode = code, uChar = it)
                     }
 
                 } else {

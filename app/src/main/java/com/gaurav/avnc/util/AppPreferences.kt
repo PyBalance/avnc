@@ -70,6 +70,8 @@ class AppPreferences(context: Context) {
         val vkOpenWithKeyboard; get() = prefs.getBoolean("vk_open_with_keyboard", false)
         val vkShowAll; get() = prefs.getBoolean("vk_show_all", false)
         var vkLayout by StringPref("vk_keys_layout", null)
+        var vkSuperLayout by StringPref("vk_super_keys_layout", null)
+        val vkFixedModifiers; get() = prefs.getBoolean("vk_fixed_modifiers", false)
         val vkRowCount; get() = prefs.getString("vk_row_count", null)?.toIntOrNull() ?: 2
         val vkUseSuperWithSingleTap; get() = prefs.getBoolean("vk_use_super_with_single_tap", false)
 
@@ -87,6 +89,9 @@ class AppPreferences(context: Context) {
 
     inner class Server {
         val clipboardSync; get() = prefs.getBoolean("clipboard_sync", true)
+        val pasteShortcut; get() = runCatching {
+            com.gaurav.avnc.session.PasteShortcut.valueOf(prefs.getString("clipboard_paste_shortcut", "Omarchy")!!)
+        }.getOrDefault(com.gaurav.avnc.session.PasteShortcut.Omarchy)
         val lockSavedServer; get() = prefs.getBoolean("lock_saved_server", false)
         val autoReconnect; get() = prefs.getBoolean("auto_reconnect", false)
         val discoveryAutorun; get() = prefs.getBoolean("discovery_autorun", true)
@@ -102,6 +107,7 @@ class AppPreferences(context: Context) {
         var hasShownV3WelcomeMsg by BooleanPref("run_info_has_shown_v3_welcome_msg", false)
         var showVirtualKeys by BooleanPref("run_info_show_virtual_keys", true)
         var virtualKeysTextBoxVisible by BooleanPref("run_info_virtual_keys_textbox_visible", false)
+        var textSendMode by StringPref("run_info_text_send_mode", "keys")
         var toolbarOpenerBtnVerticalBias by FloatPref("run_info_toolbar_opener_vertical_bias", .5f)
     }
 
@@ -178,13 +184,6 @@ class AppPreferences(context: Context) {
                 putString("vk_keys_layout", new)
             }
             putBoolean("run_info_right_meta_keys_migrated", true)
-        }
-        if (!prefs.getBoolean("run_info_backspace_added", false)) prefs.edit {
-            prefs.getString("vk_keys_layout", null)?.let { layout ->
-                if ("Backspace" !in layout.split(','))
-                    putString("vk_keys_layout", "Backspace,$layout")
-            }
-            putBoolean("run_info_backspace_added", true)
         }
     }
 }

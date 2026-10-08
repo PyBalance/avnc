@@ -51,6 +51,7 @@ class PrefsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPreference
      */
     override fun onPreferenceStartFragment(caller: PreferenceFragmentCompat, pref: Preference): Boolean {
         val fragment = supportFragmentManager.fragmentFactory.instantiate(classLoader, pref.fragment!!)
+        fragment.arguments = pref.extras
 
         supportFragmentManager.beginTransaction()
                 .replace(R.id.fragment_host, fragment)

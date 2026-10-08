@@ -15,6 +15,14 @@
         app:key="clipboard_sync"
         app:title="@string/pref_clipboard_sync" />
 
+    <ListPreference
+        app:defaultValue="Omarchy"
+        app:entries="@array/clipboard_paste_shortcut_entries"
+        app:entryValues="@array/clipboard_paste_shortcut_values"
+        app:key="clipboard_paste_shortcut"
+        app:title="@string/pref_clipboard_paste_shortcut"
+        app:useSimpleSummaryProvider="true" />
+
     <SwitchPreference
         app:defaultValue="false"
         app:key="lock_saved_server"

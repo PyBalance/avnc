@@ -32,6 +32,7 @@ import com.gaurav.avnc.R
 import com.gaurav.avnc.databinding.FragmentVirtualKeysEditorBinding
 import com.gaurav.avnc.ui.vnc.VirtualKey
 import com.gaurav.avnc.ui.vnc.VirtualKeyLayoutConfig
+import com.gaurav.avnc.ui.vnc.VirtualKeyLayoutTarget
 import com.gaurav.avnc.ui.vnc.VirtualKeyViewFactory
 import com.gaurav.avnc.util.AppPreferences
 import com.google.android.material.snackbar.Snackbar
@@ -49,20 +50,23 @@ class VirtualKeysEditor : Fragment() {
     lateinit var binding: FragmentVirtualKeysEditorBinding
     private val focusOverlay by lazy { AppCompatResources.getDrawable(requireContext(), R.drawable.focus_overlay)!! }
     private val prefs by lazy { AppPreferences(requireContext()) }
+    private val target by lazy {
+        if (arguments?.getString("layout_target") == "super") VirtualKeyLayoutTarget.Super else VirtualKeyLayoutTarget.Base
+    }
 
     private val keyList = ArrayList<KeyWrapper>()
     private var focusedKey: KeyWrapper? = null
 
     override fun onResume() {
         super.onResume()
-        activity?.setTitle(R.string.pref_customize_virtual_keys)
+        activity?.setTitle(if (target == VirtualKeyLayoutTarget.Super) R.string.pref_customize_super_keys else R.string.pref_customize_virtual_keys)
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         binding = FragmentVirtualKeysEditorBinding.inflate(inflater, container, false)
 
         binding.keyGrid.rowCount = prefs.input.vkRowCount
-        binding.keyGrid.orientation = GridLayout.VERTICAL
+        binding.keyGrid.orientation = if (target == VirtualKeyLayoutTarget.Super) GridLayout.HORIZONTAL else GridLayout.VERTICAL
         binding.keyGrid.layoutTransition.apply {
             setDuration(150)
             setStartDelay(LayoutTransition.CHANGE_DISAPPEARING, 150)
@@ -80,10 +84,11 @@ class VirtualKeysEditor : Fragment() {
 
         // Populate keys
         val focusIndex = savedInstanceState?.getInt("focus_index") ?: -1
-        val enabledKeys = savedInstanceState?.getStringArray("key_names")?.map { VirtualKey.valueOf(it) }
-                          ?: VirtualKeyLayoutConfig.getLayout(prefs)
+        val enabledKeys = savedInstanceState?.getStringArray("key_names")?.mapNotNull { name ->
+            VirtualKey.entries.find { it.name == name }
+        }?.distinct() ?: VirtualKeyLayoutConfig.getLayout(prefs, target)
         enabledKeys.forEach { addNewKey(it) }
-        if (focusIndex >= 0) {
+        if (focusIndex in keyList.indices) {
             setFocusedKey(keyList[focusIndex].view)
             binding.keyGrid.doOnLayout { refreshFocus() }
         }
@@ -120,7 +125,7 @@ class VirtualKeysEditor : Fragment() {
 
     private fun saveKeys() {
         val enabledKeys = keyList.map { it.vk }
-        VirtualKeyLayoutConfig.setLayout(prefs, enabledKeys)
+        VirtualKeyLayoutConfig.setLayout(prefs, enabledKeys, target)
         Snackbar.make(requireView(), R.string.msg_saved, Snackbar.LENGTH_SHORT).show()
         finish()
     }
@@ -128,10 +133,12 @@ class VirtualKeysEditor : Fragment() {
     private fun loadDefaults() {
         while (keyList.isNotEmpty())
             removeKey(keyList.last())
-        VirtualKeyLayoutConfig.getDefaultLayout(prefs).forEach { addNewKey(it) }
+        VirtualKeyLayoutConfig.getDefaultLayout(prefs, target).forEach { addNewKey(it) }
     }
 
     private fun updateActionButtons() {
+        if (target == VirtualKeyLayoutTarget.Super)
+            binding.keyGrid.columnCount = ((keyList.size + prefs.input.vkRowCount - 1) / prefs.input.vkRowCount).coerceAtLeast(1)
         val index = focusedKey?.let { keyList.indexOf(it) } ?: -1
         binding.moveUpBtn.isEnabled = index > 0
         binding.moveDownBtn.isEnabled = index >= 0 && index < (keyList.size - 1)

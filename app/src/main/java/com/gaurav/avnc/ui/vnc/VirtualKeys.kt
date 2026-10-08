@@ -12,7 +12,6 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.SystemClock
 import android.util.AttributeSet
-import android.util.Log
 import android.view.GestureDetector
 import android.view.GestureDetector.SimpleOnGestureListener
 import android.view.Gravity
@@ -31,10 +30,10 @@ import android.widget.ImageButton
 import android.widget.ToggleButton
 import android.widget.Toast
 import androidx.appcompat.widget.AppCompatEditText
-import androidx.appcompat.widget.PopupMenu
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat.Type
+import androidx.core.widget.doAfterTextChanged
 import androidx.core.view.isVisible
 import androidx.viewpager.widget.PagerAdapter
 import androidx.viewpager.widget.ViewPager
@@ -46,7 +45,6 @@ import com.gaurav.avnc.util.AppPreferences
 import com.gaurav.avnc.util.addOnGlobalLayoutListener
 import com.gaurav.avnc.util.isTrue
 import com.gaurav.avnc.util.toggleKeyboard
-import kotlin.math.min
 import kotlin.math.sign
 
 
@@ -69,6 +67,8 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
     private var openedWithKb = false
     private var closedByPiPMode = false
     private val pressedSuperKeys = mutableSetOf<Int>()
+    private val baseKeyViews = mutableListOf<View>()
+    private var synchronizingToggles = false
 
     val container: View? get() = stub.root
 
@@ -113,6 +113,12 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
             show()
     }
 
+    fun onDisconnected() {
+        releaseMetaKeys()
+        pressedSuperKeys.clear()
+        (stub.binding as? VirtualKeysBinding)?.let(::updateKeyGroups)
+    }
+
     fun releaseMetaKeys() {
         releaseHeldKeys()
         toggleKeys.forEach {
@@ -124,7 +130,7 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
     private fun releaseUnlockedMetaKeys() {
         toggleKeys.forEach {
             // Super stays active for repeated workspace/clipboard shortcuts until explicitly released.
-            if (it.isChecked && it.tag != VirtualKey.LeftSuper && !lockedToggleKeys.contains(it))
+            if (it.isChecked && it.tag != VirtualKey.LeftSuper && lockedToggleKeys.none { locked -> locked.tag == it.tag })
                 it.isChecked = false
         }
     }
@@ -137,7 +143,8 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
                 val visible = pressedSuperKeys.isNotEmpty()
                 if (binding.superKeys.isVisible != visible) {
                     binding.superKeys.isVisible = visible
-                    binding.keysPage.post { binding.keysPage.scrollTo(0, 0) }
+                    updateKeyGroups(binding)
+                    binding.keysScroll.post { binding.keysScroll.scrollTo(0, 0) }
                 }
             }
         }
@@ -175,7 +182,6 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
      */
     private fun initPager(binding: VirtualKeysBinding) {
         val root = binding.root
-        val keys = binding.keysHost
         val pager = binding.pager
         val pages = listOf(binding.keysPage, binding.textPage)
 
@@ -216,17 +222,22 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
         // and HorizontalScrollView is relied upon to access all keys.
         // NOTE: Paddings in root/pager view is NOT handled by this code.
 
-        // Start with something sane
-        MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED).let { keys.measure(it, it) }
-        root.layoutParams = root.layoutParams.apply { width = keys.measuredWidth; height = keys.measuredHeight }
-
-        // Update size after layout changes
-        addOnGlobalLayoutListener(activity, keys) {
-            val w = min(keys.width, inputView.width)
-            val h = keys.height
+        // Text controls always have two rows even with a one-row key layout.
+        // Fill the available viewport so pinned modifiers cannot be scrolled out of reach.
+        fun updateSize() {
+            val w = inputView.width
+            val spec = MeasureSpec.makeMeasureSpec(w.coerceAtLeast(1), MeasureSpec.EXACTLY)
+            val unspecified = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+            binding.textPage.measure(spec, unspecified)
+            binding.keysHost.measure(unspecified, unspecified)
+            binding.fixedKeys.measure(unspecified, unspecified)
+            val h = maxOf(binding.keysHost.measuredHeight, binding.fixedKeys.measuredHeight,
+                          binding.textPage.measuredHeight)
             if (w > 0 && h > 0 && (root.width != w || root.height != h))
                 root.layoutParams = root.layoutParams.apply { width = w; height = h }
         }
+        updateSize()
+        addOnGlobalLayoutListener(activity, root) { updateSize() }
 
         // Switch to text page if it was active last time
         if (pref.runInfo.virtualKeysTextBoxVisible)
@@ -235,76 +246,107 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
 
 
     private fun initTextPage(binding: VirtualKeysBinding) {
-        binding.textPageBackBtn.setOnClickListener {
-            binding.pager.setCurrentItem(0, true)
+        binding.textPageBackBtn.setOnClickListener { binding.pager.setCurrentItem(0, true) }
+        binding.textBox.setText(viewModel.textDraft)
+        binding.textBox.doAfterTextChanged { viewModel.textDraft = it?.toString().orEmpty() }
+        fun updateMode() {
+            val clipboard = viewModel.textSendMode == "clipboard"
+            binding.textSendBtn.isVisible = !clipboard
+            binding.textCopyBtn.isVisible = clipboard
+            binding.textClipboardBtn.isVisible = clipboard
         }
-        binding.textBox.setOnEditorActionListener { _, _, _ ->
-            handleTextBoxAction(binding.textBox)
-            true
+        binding.textModeGroup.check(if (viewModel.textSendMode == "clipboard") R.id.text_mode_clipboard else R.id.text_mode_keys)
+        updateMode()
+        binding.textModeGroup.addOnButtonCheckedListener { _, id, checked ->
+            if (checked) {
+                viewModel.textSendMode = if (id == R.id.text_mode_clipboard) "clipboard" else "keys"
+                updateMode()
+            }
+        }
+        fun sendClipboard(shortcut: PasteShortcut) {
+            val text = binding.textBox.text?.toString().orEmpty()
+            if (text.isEmpty() || viewModel.clipboardSending.isTrue) return
+            releaseMetaKeys()
+            if (!viewModel.sendTextViaClipboard(text, shortcut))
+                Toast.makeText(activity, R.string.msg_text_send_failed, Toast.LENGTH_SHORT).show()
+        }
+        binding.textCopyBtn.setOnClickListener { sendClipboard(PasteShortcut.CopyOnly) }
+        binding.textClipboardBtn.setOnClickListener { sendClipboard(pref.server.pasteShortcut) }
+        binding.textSendBtn.setOnClickListener { handleTextBoxAction(binding.textBox) }
+        binding.textBox.setOnEditorActionListener { _, action, _ ->
+            if (action == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) {
+                if (viewModel.textSendMode == "clipboard") sendClipboard(pref.server.pasteShortcut)
+                else handleTextBoxAction(binding.textBox)
+                true
+            } else false // An explicit keyboard newline stays in the draft.
         }
         binding.textBox.setOnFocusChangeListener { _, hasFocus ->
             if (!hasFocus) inputView.requestFocus()
         }
-        binding.textBox.onTextCopyListener = {
-            viewModel.sendClipboardText()
-        }
-        binding.textClipboardBtn.setOnClickListener { anchor ->
-            val shortcuts = listOf(
-                    R.string.title_clipboard_omarchy to PasteShortcut.Omarchy,
-                    R.string.title_clipboard_ctrl_v to PasteShortcut.CtrlV,
-                    R.string.title_clipboard_ctrl_shift_v to PasteShortcut.CtrlShiftV,
-                    R.string.title_clipboard_shift_insert to PasteShortcut.ShiftInsert,
-                    R.string.title_clipboard_copy_only to PasteShortcut.CopyOnly)
-            PopupMenu(activity, anchor).apply {
-                shortcuts.forEachIndexed { index, (title, _) -> menu.add(0, index, index, title) }
-                setOnMenuItemClickListener { item ->
-                    val text = binding.textBox.text?.toString().orEmpty()
-                    if (text.isEmpty()) {
-                        Toast.makeText(activity, R.string.msg_clipboard_text_empty, Toast.LENGTH_SHORT).show()
-                    } else {
-                        releaseMetaKeys()
-                        viewModel.sendTextViaClipboard(text, shortcuts[item.itemId].second)
-                    }
-                    // Keep the draft so a failed paste can be retried without retyping it.
-                    true
-                }
-                show()
-            }
+        binding.textBox.onTextCopyListener = { viewModel.sendClipboardText() }
+        viewModel.clipboardSending.observe(activity) { sending ->
+            binding.textSendBtn.isEnabled = !sending
+            binding.textCopyBtn.isEnabled = !sending
+            binding.textClipboardBtn.isEnabled = !sending
         }
     }
 
     private fun initKeys(binding: VirtualKeysBinding) {
-        binding.superKeys.rowCount = pref.input.vkRowCount
-        listOf(VirtualKey.Num1, VirtualKey.Num2, VirtualKey.Num3, VirtualKey.Num4, VirtualKey.Num5,
-               VirtualKey.C, VirtualKey.V, VirtualKey.Space, VirtualKey.Enter).forEach { vk ->
-            val view = VirtualKeyViewFactory.create(binding.root.context, vk)
-            binding.superKeys.addView(view)
-            initNormalKey(view, vk.keyCode!!)
-        }
-        binding.keys.rowCount = pref.input.vkRowCount
-        VirtualKeyLayoutConfig.getLayout(pref).forEach { vk ->
+        listOf(binding.fixedKeys, binding.superKeys, binding.keys).forEach { it.rowCount = pref.input.vkRowCount }
+        binding.superKeys.orientation = GridLayout.HORIZONTAL
+        binding.superKeys.columnCount = (VirtualKeyLayoutConfig.getLayout(pref, VirtualKeyLayoutTarget.Super).size + pref.input.vkRowCount - 1) / pref.input.vkRowCount
+        fun createKey(vk: VirtualKey): View {
             val view = VirtualKeyViewFactory.create(binding.root.context, vk)
             view.tag = vk
-            binding.keys.addView(view)
-
-            if (vk == VirtualKey.ToggleKeyboard) {
-                view.setOnClickListener { toggleKeyboard(inputView) }
-            } else if (vk == VirtualKey.CloseKeys) {
-                view.setOnClickListener { hide(true) }
-            } else if (vk.keyCode != null) {
-                if (view is ToggleButton)
-                    initToggleKey(view, vk.keyCode)
-                else
-                    initNormalKey(view, vk.keyCode)
+            if (vk == VirtualKey.ToggleKeyboard) view.setOnClickListener { toggleKeyboard(inputView) }
+            else if (vk == VirtualKey.CloseKeys) view.setOnClickListener { hide(true) }
+            else if (vk.keyCode != null) {
+                if (view is ToggleButton) initToggleKey(view, vk.keyCode)
+                else initNormalKey(view, vk.keyCode)
             }
+            return view
         }
+        VirtualKeyLayoutConfig.getLayout(pref, VirtualKeyLayoutTarget.Super).forEach {
+            binding.superKeys.addView(createKey(it))
+        }
+        VirtualKeyLayoutConfig.getLayout(pref).forEach { baseKeyViews += createKey(it) }
+        updateKeyGroups(binding)
     }
 
+    private fun updateKeyGroups(binding: VirtualKeysBinding) {
+        val superActive = pressedSuperKeys.isNotEmpty()
+        val pinned = baseKeyViews.filter {
+            val vk = it.tag as VirtualKey
+            (pref.input.vkFixedModifiers && vk.isToggle) || (superActive && vk == VirtualKey.LeftSuper)
+        }
+        // Reparent existing views; never modify the stored layout or lose checked/held state.
+        baseKeyViews.forEach { view ->
+            val parent = if (view in pinned) binding.fixedKeys else binding.keys
+            if (view.parent !== parent) {
+                (view.parent as? ViewGroup)?.removeView(view)
+                parent.addView(view)
+            }
+        }
+        // Re-establish the original relative order when Super moves back into the base group.
+        listOf(binding.fixedKeys, binding.keys).forEach { grid ->
+            val ordered = baseKeyViews.filter { (it in pinned) == (grid === binding.fixedKeys) }
+            if (ordered.indices.any { grid.getChildAt(it) !== ordered[it] }) {
+                grid.removeAllViews()
+                ordered.forEach { grid.addView(it) }
+            }
+        }
+        binding.fixedKeys.isVisible = pinned.isNotEmpty()
+        binding.superKeys.isVisible = superActive
+    }
 
     private fun initToggleKey(key: ToggleButton, keyCode: Int) {
         key.setOnCheckedChangeListener { _, isChecked ->
+            if (synchronizingToggles) return@setOnCheckedChangeListener
+            synchronizingToggles = true
+            toggleKeys.filter { it !== key && it.tag == key.tag }.forEach { it.isChecked = isChecked }
+            synchronizingToggles = false
             sendKey(keyCode, isChecked)
-            if (!isChecked) lockedToggleKeys.remove(key)
+            if (!isChecked) lockedToggleKeys.removeAll { it.tag == key.tag }
         }
         key.setOnLongClickListener {
             key.toggle()
@@ -323,7 +365,9 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
 
     private fun initNormalKey(key: View, keyCode: Int) {
         check(key !is ToggleButton) { "use initToggleKey()" }
-        if (keyCode == KeyEvent.KEYCODE_DEL || keyCode == KeyEvent.KEYCODE_FORWARD_DEL) {
+        if (keyCode == KeyEvent.KEYCODE_DEL || keyCode == KeyEvent.KEYCODE_FORWARD_DEL ||
+            keyCode in listOf(KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
+                              KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN)) {
             initHeldKey(key, keyCode)
             return
         }
@@ -340,9 +384,10 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     if (key !in heldKeys) {
-                        heldKeys[key] = keyCode
-                        key.isPressed = true
-                        sendKey(keyCode, true)
+                        if (sendKey(keyCode, true)) {
+                            heldKeys[key] = keyCode
+                            key.isPressed = true
+                        }
                     }
                 }
                 MotionEvent.ACTION_UP -> {
@@ -406,20 +451,26 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
     }
 
     private fun handleTextBoxAction(textBox: EditText) {
-        val text = textBox.text?.ifEmpty { "\n" }?.toString() ?: return
+        if (viewModel.clipboardSending.isTrue) return
+        val text = textBox.text?.toString().orEmpty()
+        if (text.isEmpty()) return
+        if (!viewModel.connected || viewModel.client?.inputEnabled != true) {
+            Toast.makeText(activity, R.string.msg_text_send_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
         val events = keyCharMap.getEvents(text.toCharArray())
-
-        // Release Meta keys to avoid interference with these key events
         releaseMetaKeys()
-
-        // These events are sent to KeyHandler.onKeyEvent() instead of onVkKeyEvent()
-        // to treat these like normal system key events.
-        if (events == null)
+        // Preserve the normal Android key mapping. Fallback handles Unicode code points
+        // and maps draft newlines to Enter in KeyHandler.
+        val queued = if (events == null)
             inputHandler.onKeyEvent(KeyEvent(SystemClock.uptimeMillis(), text, 0, 0))
-        else
-            events.forEach { inputHandler.onKeyEvent(it) }
-
-        textBox.setText("")
+        else {
+            var allQueued = true
+            events.forEach { if (!inputHandler.onKeyEvent(it)) allQueued = false }
+            allQueued
+        }
+        if (queued) textBox.setText("")
+        else Toast.makeText(activity, R.string.msg_text_send_failed, Toast.LENGTH_SHORT).show()
     }
 
     private fun sendKey(keyCode: Int) {
@@ -427,10 +478,11 @@ class VirtualKeys(private val activity: VncActivity, private val inputHandler: I
         sendKey(keyCode, false)
     }
 
-    private fun sendKey(keyCode: Int, isDown: Boolean) {
+    private fun sendKey(keyCode: Int, isDown: Boolean): Boolean {
         val action = if (isDown) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP
-        inputHandler.onVkKeyEvent(KeyEvent(action, keyCode))
+        return inputHandler.onVkKeyEvent(KeyEvent(action, keyCode))
     }
+
 }
 
 /**
@@ -476,8 +528,9 @@ enum class VirtualKey(
     Num3(keyCode = KeyEvent.KEYCODE_3, label = "3"),
     Num4(keyCode = KeyEvent.KEYCODE_4, label = "4"),
     Num5(keyCode = KeyEvent.KEYCODE_5, label = "5"),
-    C(keyCode = KeyEvent.KEYCODE_C, label = "c"),
-    V(keyCode = KeyEvent.KEYCODE_V, label = "v"),
+    C(keyCode = KeyEvent.KEYCODE_C, label = "C"),
+    V(keyCode = KeyEvent.KEYCODE_V, label = "V"),
+    X(keyCode = KeyEvent.KEYCODE_X, label = "X"),
     Space(keyCode = KeyEvent.KEYCODE_SPACE),
     Enter(keyCode = KeyEvent.KEYCODE_ENTER),
     Backspace(keyCode = KeyEvent.KEYCODE_DEL, label = "⌫", description = "Backspace"),
@@ -489,7 +542,7 @@ enum class VirtualKey(
     PgUp(keyCode = KeyEvent.KEYCODE_PAGE_UP),
     PgDn(keyCode = KeyEvent.KEYCODE_PAGE_DOWN),
     Insert(keyCode = KeyEvent.KEYCODE_INSERT),
-    Delete(keyCode = KeyEvent.KEYCODE_FORWARD_DEL),
+    Delete(keyCode = KeyEvent.KEYCODE_FORWARD_DEL, label = "Del", description = "Delete"),
 
     // Arrow keys
     Left(keyCode = KeyEvent.KEYCODE_DPAD_LEFT, icon = R.drawable.ic_keyboard_arrow_left),
@@ -515,6 +568,8 @@ enum class VirtualKey(
  * Users can change the layout of keys in app settings.
  * Layout configuration is stored as a simple list of key-names.
  */
+enum class VirtualKeyLayoutTarget { Base, Super }
+
 object VirtualKeyLayoutConfig {
 
     private val DEFAULT_LAYOUT = listOf(VirtualKey.Backspace, VirtualKey.ToggleKeyboard, VirtualKey.CloseKeys, VirtualKey.Esc, VirtualKey.LeftSuper,
@@ -532,36 +587,28 @@ object VirtualKeyLayoutConfig {
                                             VirtualKey.F9, VirtualKey.F10, VirtualKey.F11, VirtualKey.F12)
 
 
-    fun getDefaultLayout(pref: AppPreferences): List<VirtualKey> {
+    private val DEFAULT_SUPER_LAYOUT = listOf(VirtualKey.Num1, VirtualKey.Num2, VirtualKey.Num3,
+            VirtualKey.Num4, VirtualKey.Num5, VirtualKey.C, VirtualKey.V, VirtualKey.X,
+            VirtualKey.Space, VirtualKey.Enter)
+
+    fun getDefaultLayout(pref: AppPreferences, target: VirtualKeyLayoutTarget = VirtualKeyLayoutTarget.Base): List<VirtualKey> {
+        if (target == VirtualKeyLayoutTarget.Super) return DEFAULT_SUPER_LAYOUT
         return if (pref.input.vkShowAll) DEFAULT_LAYOUT_ALL else DEFAULT_LAYOUT
     }
 
-    fun getLayout(pref: AppPreferences): List<VirtualKey> {
-        runCatching {
-            pref.input.vkLayout?.let { vkLayout ->
-                vkLayout.split(',').map { VirtualKey.valueOf(it) }.let { keys ->
-                    check(keys.isNotEmpty())
-                    return keys
-                }
-            }
-        }.onFailure { Log.e(javaClass.simpleName, "Error parsing key layout [${pref.input.vkLayout}]: ", it) }
-
-        return getDefaultLayout(pref)
+    fun getLayout(pref: AppPreferences, target: VirtualKeyLayoutTarget = VirtualKeyLayoutTarget.Base): List<VirtualKey> {
+        val saved = if (target == VirtualKeyLayoutTarget.Super) pref.input.vkSuperLayout else pref.input.vkLayout
+        val keys = saved?.split(',')?.mapNotNull { name -> VirtualKey.entries.find { it.name == name } }?.distinct()
+        return keys?.takeIf { it.isNotEmpty() } ?: getDefaultLayout(pref, target)
     }
 
-    fun setLayout(pref: AppPreferences, keys: List<VirtualKey>) {
-        if (keys == getDefaultLayout(pref) && pref.input.vkLayout != null) {
-            // Restoring the defaults, so simply remove the pref.
-            // Pref is only used if user changes the default layout.
-            pref.input.vkLayout = null
-            return
-        }
-
-        if (keys == getLayout(pref))
-            return   // Nothing changed
-
-        pref.input.vkLayout = keys.joinToString(",") { it.name }
+    fun setLayout(pref: AppPreferences, keys: List<VirtualKey>, target: VirtualKeyLayoutTarget = VirtualKeyLayoutTarget.Base) {
+        require(keys.isNotEmpty() && keys == keys.distinct())
+        val saved = if (keys == getDefaultLayout(pref, target)) null else keys.joinToString(",") { it.name }
+        if (target == VirtualKeyLayoutTarget.Super) pref.input.vkSuperLayout = saved
+        else pref.input.vkLayout = saved
     }
+
 }
 
 /**

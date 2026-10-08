@@ -172,6 +172,17 @@
         <Preference
             app:fragment="com.gaurav.avnc.ui.prefs.VirtualKeysEditor"
             app:title="@string/pref_customize_virtual_keys" />
+
+        <Preference
+            app:fragment="com.gaurav.avnc.ui.prefs.VirtualKeysEditor"
+            app:title="@string/pref_customize_super_keys">
+            <extra android:name="layout_target" android:value="super" />
+        </Preference>
+
+        <SwitchPreference
+            app:defaultValue="false"
+            app:key="vk_fixed_modifiers"
+            app:title="@string/pref_vk_fixed_modifiers" />
     </PreferenceCategory>
 
     <PreferenceCategory

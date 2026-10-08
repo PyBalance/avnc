@@ -81,6 +81,7 @@ class Messenger(private val client: VncClient) {
     }
 
     fun sendKey(keySym: Int, xtCode: Int, isDown: Boolean): Boolean {
+        if (!client.inputEnabled) return false
         return execute { client.sendKeyEvent(keySym, xtCode, isDown) }
     }
 

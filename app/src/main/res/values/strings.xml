@@ -280,4 +280,13 @@
     <string name="pref_keycode_map">Keycode map</string>
     <string name="pref_touch_test">Touch test</string>
     <string name="pref_key_test">Key test</string>
+    <string name="title_text_mode_keys">Key input</string>
+    <string name="title_text_mode_clipboard">Clipboard</string>
+    <string name="title_send_text">Send</string>
+    <string name="title_text_copy_only">Copy</string>
+    <string name="title_text_copy_paste">Copy &amp; paste</string>
+    <string name="pref_customize_super_keys">Win shortcut layout</string>
+    <string name="pref_vk_fixed_modifiers">Pin modifier keys</string>
+    <string name="pref_clipboard_paste_shortcut">Clipboard paste shortcut</string>
+    <string name="msg_text_send_failed">Unable to queue input; draft kept</string>
 </resources>

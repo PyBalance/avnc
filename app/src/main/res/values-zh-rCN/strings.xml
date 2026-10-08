@@ -247,4 +247,13 @@
     <string name="pref_gesture_action_remote_back_press">在服务器上按返回</string>
     <string name="pref_vk_use_super_with_single_tap">单次轻按使用超级键</string>
     <string name="pref_bell">响铃</string>
+    <string name="title_text_mode_keys">按键输入</string>
+    <string name="title_text_mode_clipboard">剪贴板</string>
+    <string name="title_send_text">发送</string>
+    <string name="title_text_copy_only">仅复制</string>
+    <string name="title_text_copy_paste">复制并粘贴</string>
+    <string name="pref_customize_super_keys">Win 组合键布局</string>
+    <string name="pref_vk_fixed_modifiers">固定修饰键</string>
+    <string name="pref_clipboard_paste_shortcut">剪贴板粘贴方式</string>
+    <string name="msg_text_send_failed">无法发送，草稿已保留</string>
 </resources>

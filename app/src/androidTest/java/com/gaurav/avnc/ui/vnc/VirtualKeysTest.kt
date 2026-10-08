@@ -97,7 +97,7 @@ class VirtualKeysTest : VncSessionTest() {
 
         vncSession.run {
             onView(withText("Insert")).perform(scrollTo()).checkIsDisplayed()
-            onView(withText("Delete")).perform(scrollTo()).checkIsDisplayed()
+            onView(withText("Del")).perform(scrollTo()).checkIsDisplayed()
             onView(withText("F1")).perform(scrollTo()).checkIsDisplayed()
         }
     }
@@ -238,13 +238,13 @@ class VirtualKeysTest : VncSessionTest() {
             onView(withContentDescription("Super")).doClick()
             onView(withText("1")).checkWillBeDisplayed().doClick()
             onView(withText("2")).doClick()
-            onView(withContentDescription("Super")).perform(scrollTo()).check(matches(isChecked()))
+            onView(withContentDescription("Super")).check(matches(isChecked()))
             onView(withText("Ctrl")).perform(scrollTo()).doClick()
-            onView(withText("v")).perform(scrollTo()).doClick()
-            onView(withContentDescription("Super")).perform(scrollTo()).check(matches(isChecked()))
+            onView(withText("V")).perform(scrollTo()).doClick()
+            onView(withContentDescription("Super")).check(matches(isChecked()))
             onView(withText("Ctrl")).check(matches(isNotChecked()))
             onView(withText("1")).perform(scrollTo()).checkIsDisplayed()
-            onView(withContentDescription("Super")).perform(scrollTo()).doClick()
+            onView(withContentDescription("Super")).doClick()
             onView(withText("1")).checkIsNotDisplayed()
         }
         assertEquals(listOf(XKeySym.XK_Super_L, XKeySym.XK_1, XKeySym.XK_2,
@@ -258,8 +258,8 @@ class VirtualKeysTest : VncSessionTest() {
         vncSession.run {
             onView(withId(R.id.pager)).perform(ViewPagerActions.scrollToLast(false))
             onView(withId(R.id.text_box)).perform(replaceText("clipboard draft"))
-            onView(withId(R.id.text_clipboard_btn)).doClick()
-            onView(withText(R.string.title_clipboard_copy_only)).doClick()
+            onView(withId(R.id.text_mode_clipboard)).doClick()
+            onView(withId(R.id.text_copy_btn)).doClick()
             pollingAssert { assertEquals("clipboard draft", vncSession.server.receivedCutText) }
             onView(withId(R.id.text_box)).check(matches(withText("clipboard draft")))
         }
@@ -275,8 +275,8 @@ class VirtualKeysTest : VncSessionTest() {
             closeSystemDialogs()
             onView(withId(R.id.pager)).perform(ViewPagerActions.scrollToLast(false))
             onView(withId(R.id.text_box)).perform(replaceText(draft))
-            onView(withId(R.id.text_clipboard_btn)).doClick()
-            onView(withText(R.string.title_clipboard_copy_only)).doClick()
+            onView(withId(R.id.text_mode_clipboard)).doClick()
+            onView(withId(R.id.text_copy_btn)).doClick()
             pollingAssert { Assert.assertTrue(vncSession.server.receivedClipboardTexts.contains(draft)) }
             pollingAssert { assertEquals(draft, getClipboardText()) }
             var sync: Job? = null
@@ -315,8 +315,8 @@ class VirtualKeysTest : VncSessionTest() {
             closeSystemDialogs()
             onView(withId(R.id.pager)).perform(ViewPagerActions.scrollToLast(false))
             onView(withId(R.id.text_box)).perform(replaceText(draft))
-            onView(withId(R.id.text_clipboard_btn)).doClick()
-            onView(withText(R.string.title_clipboard_copy_only)).doClick()
+            onView(withId(R.id.text_mode_clipboard)).doClick()
+            onView(withId(R.id.text_copy_btn)).doClick()
             pollingAssert { assertEquals(draft, session.server.receivedCutText) }
             pollingAssert { assertEquals(draft, getClipboardText()) }
             var sync: Job? = null
@@ -358,10 +358,10 @@ class VirtualKeysTest : VncSessionTest() {
     }
 
     @Test
-    fun savedLayoutGetsBackspaceOnceAndRemainsEditable() {
+    fun savedLayoutIsNeverRewrittenAndRemainsEditable() {
         targetPrefs.edit { putString("vk_keys_layout", "Tab,LeftCtrl") }
         var prefs = runOnMainSync { AppPreferences(targetContext) }
-        assertEquals(listOf(VirtualKey.Backspace, VirtualKey.Tab, VirtualKey.LeftCtrl), VirtualKeyLayoutConfig.getLayout(prefs))
+        assertEquals(listOf(VirtualKey.Tab, VirtualKey.LeftCtrl), VirtualKeyLayoutConfig.getLayout(prefs))
         targetPrefs.edit { putString("vk_keys_layout", "Tab,LeftCtrl") }
         prefs = runOnMainSync { AppPreferences(targetContext) }
         assertEquals(listOf(VirtualKey.Tab, VirtualKey.LeftCtrl), VirtualKeyLayoutConfig.getLayout(prefs))
@@ -437,4 +437,258 @@ class VirtualKeysTest : VncSessionTest() {
         // If for some reason layout pref is corrupted, default config should be loaded
         assertEquals(defaultKeys, keys)
     }
+    @Test
+    fun layoutsSkipUnknownKeysWithoutDiscardingSavedOrder() {
+        targetPrefs.edit {
+            putString("vk_keys_layout", "Tab,future-key,LeftCtrl,Tab,Left")
+            putString("vk_super_keys_layout", "X,Num5,unknown,C,X")
+            putString("vk_row_count", "3")
+        }
+        val prefs = runOnMainSync { AppPreferences(targetContext) }
+        assertEquals(listOf(VirtualKey.Tab, VirtualKey.LeftCtrl, VirtualKey.Left), VirtualKeyLayoutConfig.getLayout(prefs))
+        assertEquals(listOf(VirtualKey.X, VirtualKey.Num5, VirtualKey.C),
+                     VirtualKeyLayoutConfig.getLayout(prefs, VirtualKeyLayoutTarget.Super))
+        assertEquals(3, prefs.input.vkRowCount)
+        VirtualKeyLayoutConfig.setLayout(prefs, listOf(VirtualKey.C, VirtualKey.V), VirtualKeyLayoutTarget.Super)
+        assertEquals("Tab,future-key,LeftCtrl,Tab,Left", targetPrefs.getString("vk_keys_layout", null))
+    }
+
+    @Test
+    fun pinnedModifiersAndSuperReleaseRemainVisibleAfterScrolling() {
+        targetPrefs.edit {
+            putString("vk_keys_layout", "Tab,LeftAlt,Esc,LeftSuper,LeftShift,LeftCtrl,Left,Right,Up,Down,F12")
+            putBoolean("vk_fixed_modifiers", true)
+            putString("vk_row_count", "3")
+            putString("vk_super_keys_layout", "X,Num1,C,V,Space,Enter")
+        }
+        vncSession.run {
+            onView(withContentDescription("Super")).checkWillBeDisplayed().doClick()
+            vncSession.onActivity { activity ->
+                val b = activity.binding.virtualKeysStub.binding as VirtualKeysBinding
+                assertEquals(listOf(VirtualKey.LeftAlt, VirtualKey.LeftSuper, VirtualKey.LeftShift, VirtualKey.LeftCtrl),
+                             (0 until b.fixedKeys.childCount).map { b.fixedKeys.getChildAt(it).tag })
+                assertEquals(listOf(VirtualKey.Tab, VirtualKey.Esc, VirtualKey.Left, VirtualKey.Right,
+                                    VirtualKey.Up, VirtualKey.Down, VirtualKey.F12),
+                             (0 until b.keys.childCount).map { b.keys.getChildAt(it).tag })
+                b.keysScroll.scrollTo(10000, 0)
+                assertEquals(3, b.keys.rowCount)
+                assertEquals(3, b.superKeys.rowCount)
+            }
+            onView(withContentDescription("Super")).checkIsDisplayed().doClick()
+            onView(withText("X")).checkIsNotDisplayed()
+        }
+        assertEquals("Tab,LeftAlt,Esc,LeftSuper,LeftShift,LeftCtrl,Left,Right,Up,Down,F12",
+                     targetPrefs.getString("vk_keys_layout", null))
+    }
+
+    @Test
+    fun superReleaseIsPinnedEvenWithoutFixedModifierPreference() {
+        vncSession.run {
+            onView(withContentDescription("Super")).checkWillBeDisplayed().doClick()
+            vncSession.onActivity {
+                val b = it.binding.virtualKeysStub.binding as VirtualKeysBinding
+                b.keysScroll.scrollTo(10000, 0)
+            }
+            onView(withContentDescription("Super")).checkIsDisplayed().doClick()
+            vncSession.onActivity {
+                val b = it.binding.virtualKeysStub.binding as VirtualKeysBinding
+                assertEquals(VirtualKeyLayoutConfig.getLayout(it.viewModel.pref),
+                             (0 until b.keys.childCount).map { i -> b.keys.getChildAt(i).tag })
+            }
+        }
+    }
+
+    @Test
+    fun modeSwitchPreservesDraftAndKeyInputLeavesClipboardsUnchanged() {
+        targetPrefs.edit { putBoolean("clipboard_sync", false) }
+        val text = " Abc@123 #! "
+        vncSession.run {
+            setClipboardText("phone clipboard sentinel")
+            closeSystemDialogs()
+            onView(withId(R.id.pager)).perform(ViewPagerActions.scrollToLast(false))
+            onView(withId(R.id.text_box)).perform(replaceText(text))
+            onView(withId(R.id.text_mode_clipboard)).doClick()
+            onView(withId(R.id.text_box)).check(matches(withText(text)))
+            onView(withId(R.id.text_copy_btn)).checkIsDisplayed()
+            onView(withId(R.id.text_mode_keys)).doClick()
+            onView(withId(R.id.text_box)).check(matches(withText(text)))
+            onView(withId(R.id.text_send_btn)).doClick()
+            onView(withId(R.id.text_box)).check(matches(withText("")))
+            assertEquals("phone clipboard sentinel", getClipboardText())
+        }
+        assertEquals(text.map { it.code }, vncSession.server.receivedKeyDowns.filter { it != XKeySym.XK_Shift_L })
+        assertEquals(emptyList<String>(), vncSession.server.receivedClipboardTexts.toList())
+    }
+
+    @Test
+    fun emptyInputDoesNotSendEnterAndRejectedQueueKeepsDraft() {
+        vncSession.run {
+            onView(withId(R.id.pager)).perform(ViewPagerActions.scrollToLast(false))
+            onView(withId(R.id.text_send_btn)).doClick()
+            assertEquals(emptyList<Int>(), vncSession.server.receivedKeyDowns)
+            onView(withId(R.id.text_box)).perform(replaceText("keep this draft"))
+            vncSession.onActivity { it.viewModel.messenger?.shutdown() }
+            onView(withId(R.id.text_send_btn)).doClick()
+            onView(withId(R.id.text_box)).check(matches(withText("keep this draft")))
+        }
+        assertEquals(emptyList<Int>(), vncSession.server.receivedKeyDowns)
+    }
+
+    @Test
+    fun disconnectedSendKeepsDraftAcrossActivityRecreation() {
+        vncSession.run {
+            onView(withId(R.id.pager)).perform(ViewPagerActions.scrollToLast(false))
+            onView(withId(R.id.text_box)).perform(replaceText("session memory draft"))
+            vncSession.activityScenario!!.recreate()
+            onView(withId(R.id.text_box)).checkWillBeDisplayed().check(matches(withText("session memory draft")))
+            vncSession.onActivity { it.viewModel.state.value = com.gaurav.avnc.viewmodel.VncViewModel.State.Disconnected }
+            onView(withId(R.id.text_send_btn)).doClick()
+            onView(withId(R.id.text_box)).check(matches(withText("session memory draft")))
+        }
+        assertEquals(emptyList<Int>(), vncSession.server.receivedKeyDowns)
+    }
+
+    @Test
+    fun keyInputReleasesAllModifiersAndOnlyExplicitNewlineBecomesEnter() {
+        vncSession.run {
+            onView(withText("Ctrl")).checkWillBeDisplayed()
+            vncSession.onActivity { activity ->
+                val b = activity.binding.virtualKeysStub.binding as VirtualKeysBinding
+                listOf(VirtualKey.LeftCtrl, VirtualKey.LeftAlt, VirtualKey.LeftShift, VirtualKey.LeftSuper).forEach {
+                    b.root.findViewWithTag<android.widget.ToggleButton>(it).isChecked = true
+                }
+            }
+            onView(withId(R.id.pager)).perform(ViewPagerActions.scrollToLast(false))
+            onView(withId(R.id.text_box)).perform(replaceText("a\n中文😀"))
+            onView(withId(R.id.text_send_btn)).doClick()
+        }
+        val events = vncSession.server.receivedKeySyms.toList()
+        val firstChar = events.indexOf('a'.code to true)
+        listOf(XKeySym.XK_Control_L, XKeySym.XK_Alt_L, XKeySym.XK_Shift_L, XKeySym.XK_Super_L).forEach {
+            Assert.assertTrue(events.indexOf(it to false) in 0 until firstChar)
+        }
+        assertEquals(1, events.count { it == (XKeySym.XK_Return to true) })
+        assertEquals(1, events.count { it == (XKeySym.XK_Return to false) })
+        assertEquals(1, events.count { it == (0x0101f600 to true) })
+    }
+
+    @Test
+    fun clipboardBusyGuardAllowsOnlyOnePasteAndReenablesButtons() {
+        targetPrefs.edit { putBoolean("clipboard_sync", false); putString("clipboard_paste_shortcut", "CtrlV") }
+        vncSession.run {
+            onView(withId(R.id.pager)).perform(ViewPagerActions.scrollToLast(false))
+            onView(withId(R.id.text_mode_clipboard)).doClick()
+            onView(withId(R.id.text_box)).perform(replaceText("single paste draft"))
+            vncSession.onActivity { activity ->
+                val b = activity.binding.virtualKeysStub.binding as VirtualKeysBinding
+                b.textClipboardBtn.performClick()
+                Assert.assertFalse(b.textCopyBtn.isEnabled)
+                Assert.assertFalse(activity.viewModel.sendTextViaClipboard("duplicate", com.gaurav.avnc.session.PasteShortcut.CtrlV))
+                b.textClipboardBtn.performClick()
+            }
+            pollingAssert { Assert.assertTrue(vncSession.server.receivedKeySyms.contains(XKeySym.XK_v to false)) }
+            pollingAssert { vncSession.onActivity {
+                val b = it.binding.virtualKeysStub.binding as VirtualKeysBinding
+                Assert.assertTrue(b.textCopyBtn.isEnabled && b.textClipboardBtn.isEnabled)
+            } }
+            onView(withId(R.id.text_box)).check(matches(withText("single paste draft")))
+        }
+        assertEquals(listOf("single paste draft"), vncSession.server.receivedClipboardTexts.toList())
+        assertEquals(listOf(XKeySym.XK_Control_L to true, XKeySym.XK_v to true,
+                            XKeySym.XK_v to false, XKeySym.XK_Control_L to false),
+                     vncSession.server.receivedKeySyms.toList())
+    }
+
+    @Test
+    fun heldArrowIsReleasedOnCancelBackgroundAndDisconnect() {
+        vncSession.run {
+            onView(withText("Ctrl")).checkWillBeDisplayed()
+            fun touch(action: Int) = vncSession.onActivity { activity ->
+                val b = activity.binding.virtualKeysStub.binding as VirtualKeysBinding
+                val now = SystemClock.uptimeMillis()
+                MotionEvent.obtain(now, now, action, 1f, 1f, 0).let {
+                    b.keys.findViewWithTag<View>(VirtualKey.Left).dispatchTouchEvent(it)
+                    it.recycle()
+                }
+            }
+            touch(MotionEvent.ACTION_DOWN)
+            touch(MotionEvent.ACTION_CANCEL)
+            touch(MotionEvent.ACTION_DOWN)
+            vncSession.activityScenario!!.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+            vncSession.activityScenario!!.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+            touch(MotionEvent.ACTION_DOWN)
+            vncSession.onActivity { it.virtualKeys.onDisconnected() }
+            touch(MotionEvent.ACTION_UP)
+        }
+        assertEquals(List(3) { listOf(XKeySym.XK_Left to true, XKeySym.XK_Left to false) }.flatten(),
+                     vncSession.server.receivedKeySyms.toList())
+    }
+
+    @Test
+    fun textControlsFitNarrowAndWideScreensWithLargeFonts() {
+        runOnMainSync {
+            for (locale in listOf(java.util.Locale.ENGLISH, java.util.Locale.SIMPLIFIED_CHINESE)) {
+                for (scale in listOf(1f, 1.3f, 2f)) {
+                    val config = android.content.res.Configuration(targetContext.resources.configuration)
+                    config.fontScale = scale
+                    config.setLocale(locale)
+                    val context = android.view.ContextThemeWrapper(targetContext.createConfigurationContext(config), R.style.App_Theme)
+                    val b = VirtualKeysBinding.inflate(android.view.LayoutInflater.from(context))
+                    (b.textPage.parent as android.view.ViewGroup).removeView(b.textPage)
+                    for (width in listOf(320, 360, 640)) {
+                        val pixels = (width * context.resources.displayMetrics.density).toInt()
+                        for (clipboard in listOf(false, true)) {
+                            b.textSendBtn.visibility = if (clipboard) View.GONE else View.VISIBLE
+                            b.textCopyBtn.visibility = if (clipboard) View.VISIBLE else View.GONE
+                            b.textClipboardBtn.visibility = if (clipboard) View.VISIBLE else View.GONE
+                            b.textPage.measure(View.MeasureSpec.makeMeasureSpec(pixels, View.MeasureSpec.EXACTLY),
+                                               View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+                            b.textPage.layout(0, 0, pixels, b.textPage.measuredHeight)
+                            Assert.assertTrue("Draft must retain usable width ($locale $scale $width)",
+                                              b.textBox.width >= (48 * context.resources.displayMetrics.density).toInt())
+                            val buttons = if (clipboard) listOf(b.textCopyBtn, b.textClipboardBtn) else listOf(b.textSendBtn)
+                            for (button in buttons + listOf(b.textModeKeys, b.textModeClipboard)) {
+                                Assert.assertTrue("Button must fit inside its row", button.right <= (button.parent as View).width)
+                                Assert.assertTrue("Buttons retain minimum touch width", button.width >= (48 * context.resources.displayMetrics.density).toInt())
+                                Assert.assertTrue("Button text must not be clipped", button.layout.height + button.compoundPaddingTop + button.compoundPaddingBottom <= button.height)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun unsupportedUnicodeLeavesDraftAndDoesNotRetryAsKeys() {
+        targetPrefs.edit { putBoolean("clipboard_sync", false) }
+        vncSession.run {
+            onView(withId(R.id.pager)).perform(ViewPagerActions.scrollToLast(false))
+            onView(withId(R.id.text_mode_clipboard)).doClick()
+            onView(withId(R.id.text_box)).perform(replaceText("中文😀"))
+            onView(withId(R.id.text_clipboard_btn)).doClick()
+            pollingAssert { vncSession.onActivity { Assert.assertFalse(it.viewModel.clipboardSending.value == true) } }
+            onView(withId(R.id.text_box)).check(matches(withText("中文😀")))
+        }
+        assertEquals(emptyList<String>(), vncSession.server.receivedClipboardTexts.toList())
+        assertEquals(emptyList<Int>(), vncSession.server.receivedKeyDowns)
+    }
+
+    @Test
+    fun readOnlyConnectionDoesNotClearKeyDraftOrChangeClipboard() {
+        targetPrefs.edit { putBoolean("clipboard_sync", false) }
+        vncSession.run {
+            onView(withId(R.id.pager)).perform(ViewPagerActions.scrollToLast(false))
+            onView(withId(R.id.text_box)).perform(replaceText("read-only draft"))
+            vncSession.onActivity { it.viewModel.client?.setInputDisabled(true) }
+            onView(withId(R.id.text_send_btn)).doClick()
+            onView(withId(R.id.text_box)).check(matches(withText("read-only draft")))
+            onView(withId(R.id.text_mode_clipboard)).doClick()
+            onView(withId(R.id.text_copy_btn)).doClick()
+            onView(withId(R.id.text_box)).check(matches(withText("read-only draft")))
+        }
+        assertEquals(emptyList<String>(), vncSession.server.receivedClipboardTexts.toList())
+        assertEquals(emptyList<Int>(), vncSession.server.receivedKeyDowns)
+    }
+
 }
